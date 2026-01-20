@@ -39,6 +39,10 @@ export function DirectorPanel() {
   const [flightMode, setFlightMode] = useState<FlightMode>('linear');
   const [orbitRadius, setOrbitRadius] = useState(500);
 
+  // New State for Flight Parameters
+  const [flightAltitude, setFlightAltitude] = useState(200);
+  const [flightSpeed, setFlightSpeed] = useState(200);
+
   // Effect to show/hide flight guide based on target (last waypoint)
   useEffect(() => {
     if (waypoints.length > 0) {
@@ -258,8 +262,45 @@ export function DirectorPanel() {
               <option value="lock">🎯 Target Lock</option>
             </select>
 
+            {/* Flight Parameters Sliders */}
+            <div className="space-y-4 pt-2 border-t border-white/10">
+              {/* Altitude Slider */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-white/70">
+                  <span>Flight Altitude</span>
+                  <span>{flightAltitude}m</span>
+                </div>
+                <input
+                  type="range"
+                  min="50"
+                  max="2000"
+                  step="50"
+                  value={flightAltitude}
+                  onChange={(e) => setFlightAltitude(Number(e.target.value))}
+                  className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+
+              {/* Speed Slider */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-white/70">
+                  <span>Flight Speed</span>
+                  <span>{flightSpeed}m/s</span>
+                </div>
+                <input
+                  type="range"
+                  min="10"
+                  max="500"
+                  step="10"
+                  value={flightSpeed}
+                  onChange={(e) => setFlightSpeed(Number(e.target.value))}
+                  className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+            </div>
+
             {flightMode === 'orbit' && (
-              <div className="space-y-1 pt-1">
+              <div className="space-y-1 pt-1 border-t border-white/10 mt-2">
                 <div className="flex justify-between text-xs text-white/70">
                   <span>Radius</span>
                   <span>{orbitRadius}m</span>
@@ -321,6 +362,15 @@ export function DirectorPanel() {
             {isRecording && <span className="animate-pulse w-2 h-2 rounded-full bg-red-400" />}
             {isRecording ? 'Recording...' : `Start ${flightMode === 'linear' ? 'Linear Flight' : flightMode === 'orbit' ? 'Orbit' : 'Cinematic Lock'}`}
           </button>
+
+          {isRecording && (
+            <button
+              onClick={handleStopRecording}
+              className="w-full py-3 rounded font-medium transition-colors flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white animate-pulse"
+            >
+              ⏹ Stop Recording
+            </button>
+          )}
         </div>
       </Panel>
     </div>
