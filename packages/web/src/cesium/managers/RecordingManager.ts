@@ -35,34 +35,91 @@ export class RecordingManager {
             }
         };
 
-        this.mediaRecorder.onstop = () => {
-            this.saveRecording();
-        };
+        // The onstop handler is now managed within stopRecording, so this can be removed or left as a no-op if stopRecording always handles it.
+        // For now, removing it as stopRecording explicitly sets its own onstop handler.
 
         this.mediaRecorder.start();
         this.isRecording = true;
         console.log('🎥 Recording started');
     }
 
-    public stopRecording(): void {
+    public async stopRecording(fileName?: string): Promise<void> {
         if (this.mediaRecorder && this.isRecording) {
             this.mediaRecorder.stop();
             this.isRecording = false;
-            console.log('⏹️ Recording stopped');
+
+            await new Promise<void>((resolve) => {
+                if (this.mediaRecorder) {
+                    this.mediaRecorder.onstop = async () => {
+                        const blob = new Blob(this.chunks, { type: 'video/webm' });
+                        this.chunks = []; // Clear chunks after creating blob
+                        await this.saveRecording(blob, fileName);
+                        resolve();
+                    };
+                } else {
+                    resolve();
+                }
+            });
         }
     }
 
-    private saveRecording(): void {
-        const blob = new Blob(this.chunks, { type: 'video/webm' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `flight-recording-${new Date().toISOString()}.webm`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        console.log('💾 Recording saved');
+    private async saveRecording(blob: Blob, fileName?: string): Promise<void> {
+        console.log('🔄 Starting MP4 conversion...');
+
+        // Notify UI that conversion started
+        window.dispatchEvent(new CustomEvent('recording-conversion-start'));
+
+        try {
+            const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+            const { fetchFile, toBlobURL } = await import('@ffmpeg/util');
+
+            const ffmpeg = new FFmpeg();
+
+            // Load FFmpeg
+            const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+            await ffmpeg.load({
+                coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+                wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+            });
+
+            // Write raw webm to FFmpeg FS
+            await ffmpeg.writeFile('input.webm', await fetchFile(blob));
+
+            // Run conversion
+            await ffmpeg.exec(['-i', 'input.webm', 'output.mp4']);
+
+            // Read output
+            const data = await ffmpeg.readFile('output.mp4');
+            const mp4Blob = new Blob([data as any], { type: 'video/mp4' });
+
+            // Download MP4
+            const url = URL.createObjectURL(mp4Blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName || `flight-recording-${new Date().toISOString()}.mp4`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            console.log('💾 MP4 Recording saved');
+        } catch (error) {
+            console.error('MP4 Conversion failed:', error);
+            alert('MP4 Conversion failed. Downloading WebM instead.');
+
+            // Fallback to WebM using the existing blob
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName ? fileName.replace('.mp4', '.webm') : `flight-recording-${new Date().toISOString()}.webm`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } finally {
+            // Notify UI that conversion ended
+            window.dispatchEvent(new CustomEvent('recording-conversion-end'));
+        }
     }
 
     public isActive(): boolean {

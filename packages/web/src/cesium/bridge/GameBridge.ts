@@ -46,8 +46,23 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
     }, 16);
   }
 
+
+
   private emitVehicleState(): void {
     const vehicle = this.game.getVehicleManager().getActiveVehicle();
+
+    // Emit Camera Position independently
+    const camera = this.game.getScene().camera;
+    const positionCartographic = Cesium.Cartographic.fromCartesian(camera.position);
+    this.emit('cameraPositionChanged', {
+      latitude: Cesium.Math.toDegrees(positionCartographic.latitude),
+      longitude: Cesium.Math.toDegrees(positionCartographic.longitude),
+      altitude: positionCartographic.height,
+      heading: Cesium.Math.toDegrees(camera.heading),
+      pitch: Cesium.Math.toDegrees(camera.pitch),
+      roll: Cesium.Math.toDegrees(camera.roll),
+    });
+
     if (vehicle && vehicle.isModelReady()) {
       const state = vehicle.getState();
       this.emit('vehicleStateChanged', {
@@ -149,6 +164,19 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
       };
     }
     return null;
+  }
+
+  public getCurrentCameraPosition(): CameraPositionData {
+    const camera = this.game.getScene().camera;
+    const positionCartographic = Cesium.Cartographic.fromCartesian(camera.position);
+    return {
+      latitude: Cesium.Math.toDegrees(positionCartographic.latitude),
+      longitude: Cesium.Math.toDegrees(positionCartographic.longitude),
+      altitude: positionCartographic.height,
+      heading: Cesium.Math.toDegrees(camera.heading),
+      pitch: Cesium.Math.toDegrees(camera.pitch),
+      roll: Cesium.Math.toDegrees(camera.roll),
+    };
   }
 
   public teleportTo(longitude: number, latitude: number, altitude: number, heading: number = 0): void {
@@ -297,8 +325,17 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
     this.game.getRecordingManager().startRecording();
   }
 
-  public stopRecording(): void {
-    this.game.getRecordingManager().stopRecording();
+  public stopRecording(fileName?: string): void {
+    this.game.getRecordingManager().stopRecording(fileName);
+  }
+
+  public showFlightGuide(target: { lat: number, lon: number }): void {
+    const targetCart = Cesium.Cartographic.fromDegrees(target.lon, target.lat);
+    this.game.getAutopilotManager().showGuideLine(targetCart);
+  }
+
+  public hideFlightGuide(): void {
+    this.game.getAutopilotManager().hideGuideLine();
   }
 
   public startOrbit(lat: number, lon: number, height: number, radius: number = 200, speed: number = 0.5, onComplete?: () => void): void {

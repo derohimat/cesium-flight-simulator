@@ -9,6 +9,7 @@ import { isMobileDevice } from './shared/utils/mobileDetect';
 import { useGameMethod } from './hooks/useGameMethod';
 import { HUD } from './features/hud/components/HUD';
 import { CrashScreen } from './features/crash/components/CrashScreen';
+import { RecordingStatus } from './features/hud/components/RecordingStatus';
 
 export function App() {
   const { mode } = useGameMode();
@@ -37,6 +38,7 @@ export function App() {
       <HUD   />
       {isMobile && <ThrottleSlider onChange={handleThrottleChange} />}
       <CrashScreen />
+      <RecordingStatus />
     </>
   );
 }

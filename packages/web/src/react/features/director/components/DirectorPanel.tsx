@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Panel } from '../../../shared/components/Panel';
 import { useGameMethod } from '../../../hooks/useGameMethod';
+import { useCameraPosition } from '../../../hooks/useCameraPosition';
 
 interface Waypoint {
   lat: number;
@@ -14,7 +15,21 @@ export function DirectorPanel() {
   const [isPortrait, setIsPortrait] = useState(false);
   const [autoRecord, setAutoRecord] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
-  const { flyPath, startRecording, stopRecording, startOrbit, flyPathWithTargetLock, setVehicleVisibility } = useGameMethod();
+  const {
+    flyPath,
+    startRecording,
+    stopRecording,
+    startOrbit,
+    stopOrbit,
+    stopLock,
+    flyPathWithTargetLock,
+    setVehicleVisibility,
+    getCurrentCameraPosition,
+    showFlightGuide,
+    hideFlightGuide
+  } = useGameMethod();
+
+  const cameraPosition = useCameraPosition();
 
   const [cityName, setCityName] = useState('');
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
@@ -23,6 +38,16 @@ export function DirectorPanel() {
   // New State for Flight Modes
   const [flightMode, setFlightMode] = useState<FlightMode>('linear');
   const [orbitRadius, setOrbitRadius] = useState(500);
+
+  // Effect to show/hide flight guide based on target (last waypoint)
+  useEffect(() => {
+    if (waypoints.length > 0) {
+      const target = waypoints[waypoints.length - 1];
+      showFlightGuide(target);
+    } else {
+      hideFlightGuide();
+    }
+  }, [waypoints, showFlightGuide, hideFlightGuide]);
 
   // Toggle Portrait Mode
   const togglePortrait = () => {
@@ -59,6 +84,7 @@ export function DirectorPanel() {
 
         console.log('Geocoded:', newWaypoint); // Verification requirement
         setWaypoints([...waypoints, newWaypoint]);
+        setCityName(''); // Clear input after add
       }
     } catch (error) {
       console.error('Geocoding error:', error);
@@ -70,6 +96,17 @@ export function DirectorPanel() {
   const handleStartFlight = async () => {
     if (waypoints.length === 0) return;
 
+    // cleanup
+    hideFlightGuide();
+    stopOrbit();
+    stopLock();
+
+    const currentPos = getCurrentCameraPosition();
+    const startPoint = { lat: currentPos.latitude, lon: currentPos.longitude, name: 'Start' };
+
+    // For linear flight, we fly FROM current camera position TO the waypoints
+    const flightPath = flightMode === 'linear' ? [startPoint, ...waypoints] : waypoints;
+
     if (autoRecord) {
       startRecording();
       setIsRecording(true);
@@ -77,38 +114,63 @@ export function DirectorPanel() {
 
     try {
       if (flightMode === 'linear') {
-        await flyPath(waypoints);
+        console.log('Flight Plan created:', flightPath);
+        await flyPath(flightPath.map(wp => ({ lat: wp.lat, lon: wp.lon })));
       } else if (flightMode === 'orbit') {
         const target = waypoints[waypoints.length - 1];
         startOrbit(target.lat, target.lon, 100, orbitRadius, 0.2, () => {
           console.log("Orbit complete.");
           if (autoRecord) {
-            stopRecording();
+            const filename = `arrival-${target.name.replace(/\s+/g, '-')}-100m-orbit.mp4`;
+            stopRecording(filename);
             setIsRecording(false);
           }
         });
       } else if (flightMode === 'lock') {
-        if (waypoints.length >= 2) {
+        if (waypoints.length >= 1) { // We can start lock from current pos to target if we have 1 waypoint? 
+        // The original logic required 2 waypoints in list. 
+        // Now we use current pos as start.
+        // If we have 1 waypoint (Target), we fly from Current -> Target with lock?
+        // flyPathWithTargetLock takes a PATH and a TARGET.
+        // Let's assume path is Start -> Target (or nearby).
           const target = waypoints[waypoints.length - 1];
-          const path = waypoints.slice(0, waypoints.length - 1);
-          flyPathWithTargetLock(path, target, 20); // Default 20s
+
+          // If we want a flyby with lock, we might need more logic. 
+          // For now, let's keep original behavior: path is valid waypoints list minus target?
+          // Or better: Fly from Current Position around/towards target?
+          // Let's stick to using the waypoints list as the path, but prepend start?
+          // Actually, `flyPathWithTargetLock` expects the path to be the camera path. 
+          // Updated logic: Path = [Start, ...waypoints excluding last? or all?]
+          // If flightMode is lock, Usually 1st point is start, last point is target? 
+          // Let's use [Start, ...waypoints] as path, and Target is the LAST one.
+          const lockPath = [startPoint, ...waypoints];
+          // The target to lock ON is the last waypoint.
+          flyPathWithTargetLock(lockPath.map(p => ({ lat: p.lat, lon: p.lon })), { lat: target.lat, lon: target.lon }, 30); 
         }
       }
     } catch (e) {
       console.error("Flight failed", e);
     }
 
-    // specific handling for linear completion or manual stop
-    if (flightMode === 'linear' && autoRecord) {
-      stopRecording();
-      setIsRecording(false);
+    // specific handling for linear completion or manual stop is tricky because flyPath is async but might return early? 
+    // flyPath awaits completion.
+    // So for linear:
+    if (flightMode === 'linear') {
+      if (autoRecord) {
+        const target = waypoints[waypoints.length - 1];
+        const altitude = 200; // Hardcoded in AutopilotManager for now
+        const speed = 200; // Hardcoded
+        const filename = `arrival-${target.name.replace(/\s+/g, '-')}-${altitude}m-${speed}ms.mp4`;
+        stopRecording(filename);
+        setIsRecording(false);
+      }
     }
   };
 
   const isStartDisabled = () => {
     if (flightMode === 'linear' && waypoints.length < 1) return true;
     if (flightMode === 'orbit' && waypoints.length < 1) return true;
-    if (flightMode === 'lock' && waypoints.length < 2) return true;
+    if (flightMode === 'lock' && waypoints.length < 1) return true; // Changed to 1 as we use current pos
     return false;
   };
 
@@ -116,6 +178,22 @@ export function DirectorPanel() {
     <div className="fixed top-8 left-8 z-50 w-80 pointer-events-auto">
       <Panel title="🎬 Director Mode">
         <div className="space-y-4 p-1">
+          {/* HUD Telemetry Section */}
+          <div className="bg-black/60 p-2 rounded border border-white/10 font-mono text-xs space-y-1">
+            <div className="flex justify-between text-white/70">
+              <span>LAT: {cameraPosition.latitude}</span>
+              <span>LON: {cameraPosition.longitude}</span>
+            </div>
+            <div className="flex justify-between text-white/70">
+              <span>ALT: {cameraPosition.altitude}m</span>
+              <span>HDG: {cameraPosition.heading}°</span>
+            </div>
+            <div className="flex justify-between text-white/50 text-[10px]">
+              <span>PITCH: {cameraPosition.pitch}°</span>
+              <span>ROLL: {cameraPosition.roll}°</span>
+            </div>
+          </div>
+
           {/* Settings Section */}
           <div className="grid grid-cols-2 gap-2 bg-white/5 p-2 rounded">
             <button
@@ -200,7 +278,7 @@ export function DirectorPanel() {
 
             {flightMode === 'lock' && (
               <div className="text-xs text-amber-400">
-                * Requires at least 2 waypoints (Path points + Target)
+                * Path: Camera -&gt; Target
               </div>
             )}
           </div>

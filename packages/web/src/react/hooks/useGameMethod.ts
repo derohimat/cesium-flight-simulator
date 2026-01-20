@@ -15,7 +15,7 @@ export function useGameMethod() {
     toggleCollisionDetection: () => bridge.toggleCollisionDetection(),
     getCollisionDetection: (): boolean => bridge.getCollisionDetection(),
     getVehicleState: (): VehicleStateData | null => bridge.getVehicleState(),
-    teleportTo: (longitude: number, latitude: number, altitude: number, heading?: number) => 
+    teleportTo: (longitude: number, latitude: number, altitude: number, heading?: number) =>
       bridge.teleportTo(longitude, latitude, altitude, heading),
     restart: () => bridge.restart(),
     getQualitySettings: (): QualityConfig => bridge.getQualitySettings(),
@@ -27,7 +27,7 @@ export function useGameMethod() {
     setThrottle: (percent: number) => bridge.setThrottle(percent),
     flyPath: (waypoints: { lat: number; lon: number }[]) => bridge.flyPath(waypoints),
     startRecording: () => bridge.startRecording(),
-    stopRecording: () => bridge.stopRecording(),
+    stopRecording: (fileName?: string) => bridge.stopRecording(fileName),
     startOrbit: (lat: number, lon: number, height: number, radius?: number, speed?: number, onComplete?: () => void) =>
       bridge.startOrbit(lat, lon, height, radius, speed, onComplete),
     stopOrbit: () => bridge.stopOrbit(),
@@ -35,6 +35,9 @@ export function useGameMethod() {
       bridge.flyPathWithTargetLock(waypoints, target, duration),
     stopLock: () => bridge.stopLock(),
     setVehicleVisibility: (visible: boolean) => bridge.setVehicleVisibility(visible),
+    showFlightGuide: (target: { lat: number; lon: number }) => bridge.showFlightGuide(target),
+    hideFlightGuide: () => bridge.hideFlightGuide(),
+    getCurrentCameraPosition: () => bridge.getCurrentCameraPosition(),
   };
 }
 

@@ -49,9 +49,25 @@ export class Scene {
     this.clock = this.viewer.clock;
     this.primitives = this.scene.primitives;
 
+    if (!import.meta.env.VITE_CESIUM_TOKEN) {
+      console.warn('⚠️ VITE_CESIUM_TOKEN is missing! 3D buildings might not load.');
+      alert('Cesium Token is missing. Please check your .env file.');
+    }
+
     this.setupScene();
     this.setupPostProcessing();
     this.loadTerrain();
+    this.loadBuildings();
+  }
+
+  private async loadBuildings(): Promise<void> {
+    try {
+      const buildings = await Cesium.createOsmBuildingsAsync();
+      this.primitives.add(buildings);
+      console.log('osM 3D Buildings layer added');
+    } catch (e) {
+      console.error('Failed to load 3D buildings:', e);
+    }
   }
 
   private setupScene(): void {

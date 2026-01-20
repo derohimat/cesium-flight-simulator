@@ -4,6 +4,7 @@ import { CesiumVehicleGame } from '../bootstrap/main';
 export class AutopilotManager {
     private game: CesiumVehicleGame;
     private isFlying: boolean = false;
+    private guideLineEntity?: Cesium.Entity;
 
     constructor(game: CesiumVehicleGame) {
         this.game = game;
@@ -22,7 +23,11 @@ export class AutopilotManager {
 
         try {
             for (const point of waypoints) {
-                const destination = Cesium.Cartesian3.fromDegrees(point.lon, point.lat, 300); // 300m height
+                const cartographic = Cesium.Cartographic.fromDegrees(point.lon, point.lat);
+                const terrainHeight = viewer.scene.globe.getHeight(cartographic) || 0;
+                const targetHeight = terrainHeight + 200; // Cinematic low flight (200m above ground)
+
+                const destination = Cesium.Cartesian3.fromDegrees(point.lon, point.lat, targetHeight);
 
                 await this.flyToPoint(camera, destination);
             }
@@ -204,6 +209,34 @@ export class AutopilotManager {
             this.isLocked = false;
             this.game.getInputManager().setInputLocked(false);
             console.log('⏹️ Stopped Target Lock Flight');
+        }
+    }
+
+    public showGuideLine(target: Cesium.Cartographic): void {
+        const viewer = this.game.getScene().viewer;
+        this.hideGuideLine(); // Clear existing
+
+        this.guideLineEntity = viewer.entities.add({
+            polyline: {
+                positions: new Cesium.CallbackProperty(() => {
+                    const cameraPos = viewer.camera.position;
+                    const targetPos = Cesium.Cartesian3.fromDegrees(target.longitude, target.latitude, target.height);
+                    return [cameraPos, targetPos];
+                }, false),
+                width: 2,
+                material: Cesium.Color.YELLOW.withAlpha(0.6),
+                depthFailMaterial: new Cesium.PolylineDashMaterialProperty({
+                    color: Cesium.Color.YELLOW.withAlpha(0.4),
+                }),
+            }
+        });
+    }
+
+    public hideGuideLine(): void {
+        if (this.guideLineEntity) {
+            const viewer = this.game.getScene().viewer;
+            viewer.entities.remove(this.guideLineEntity);
+            this.guideLineEntity = undefined;
         }
     }
 
