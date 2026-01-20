@@ -1,6 +1,6 @@
 import * as Cesium from 'cesium';
 import { TypedEventEmitter } from './TypedEventEmitter';
-import type { GameEvents, VehicleStateData, GameMode } from './types';
+import type { GameEvents, VehicleStateData, GameMode, CameraPositionData } from './types';
 import type { CesiumVehicleGame } from '../bootstrap/main';
 import type { CameraType } from '../managers/CameraManager';
 import type { QualityConfig } from '../core/Scene';
