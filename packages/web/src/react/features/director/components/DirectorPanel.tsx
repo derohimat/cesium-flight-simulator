@@ -163,13 +163,16 @@ export function DirectorPanel() {
     if (flightMode === 'linear') {
       if (autoRecord) {
         const target = waypoints[waypoints.length - 1];
-        const altitude = 200; // Hardcoded in AutopilotManager for now
-        const speed = 200; // Hardcoded
-        const filename = `arrival-${target.name.replace(/\s+/g, '-')}-${altitude}m-${speed}ms.mp4`;
+        const filename = `arrival-${target.name.replace(/\s+/g, '-')}-${flightAltitude}m-${flightSpeed}ms.mp4`;
         stopRecording(filename);
         setIsRecording(false);
       }
     }
+  };
+
+  const handleStopRecording = () => {
+    stopRecording();
+    setIsRecording(false);
   };
 
   const isStartDisabled = () => {
