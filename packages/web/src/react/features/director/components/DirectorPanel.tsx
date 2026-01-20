@@ -119,13 +119,13 @@ export function DirectorPanel() {
     try {
       if (flightMode === 'linear') {
         console.log('Flight Plan created:', flightPath);
-        await flyPath(flightPath.map(wp => ({ lat: wp.lat, lon: wp.lon })));
+        await flyPath(flightPath.map(wp => ({ lat: wp.lat, lon: wp.lon })), { speed: flightSpeed, altitude: flightAltitude });
       } else if (flightMode === 'orbit') {
         const target = waypoints[waypoints.length - 1];
-        startOrbit(target.lat, target.lon, 100, orbitRadius, 0.2, () => {
+        startOrbit(target.lat, target.lon, flightAltitude, orbitRadius, 0.2, () => {
           console.log("Orbit complete.");
           if (autoRecord) {
-            const filename = `arrival-${target.name.replace(/\s+/g, '-')}-100m-orbit.mp4`;
+            const filename = `arrival-${target.name.replace(/\s+/g, '-')}-${flightAltitude}m-orbit.mp4`;
             stopRecording(filename);
             setIsRecording(false);
           }
@@ -149,7 +149,8 @@ export function DirectorPanel() {
           // Let's use [Start, ...waypoints] as path, and Target is the LAST one.
           const lockPath = [startPoint, ...waypoints];
           // The target to lock ON is the last waypoint.
-          flyPathWithTargetLock(lockPath.map(p => ({ lat: p.lat, lon: p.lon })), { lat: target.lat, lon: target.lon }, 30); 
+          // Pass speed to flyPathWithTargetLock options
+          flyPathWithTargetLock(lockPath.map(p => ({ lat: p.lat, lon: p.lon })), { lat: target.lat, lon: target.lon }, { speed: flightSpeed }); 
         }
       }
     } catch (e) {
