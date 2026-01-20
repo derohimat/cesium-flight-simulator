@@ -10,7 +10,7 @@ export class AutopilotManager {
         this.game = game;
     }
 
-    public async flyPath(waypoints: { lat: number; lon: number }[]) {
+    public async flyPath(waypoints: { lat: number; lon: number }[], options: { speed?: number; altitude?: number } = {}) {
         if (this.isFlying || waypoints.length === 0) return;
 
         this.isFlying = true;
@@ -19,17 +19,20 @@ export class AutopilotManager {
         const viewer = this.game.getScene().viewer;
         const camera = viewer.camera;
 
-        console.log('✈️ Starting Autopilot Flight...');
+        const speed = options.speed || 200; // Default 200 m/s
+        const altitude = options.altitude || 200; // Default 200m
+
+        console.log(`✈️ Starting Autopilot Flight (Speed: ${speed}m/s, Alt: ${altitude}m)...`);
 
         try {
             for (const point of waypoints) {
                 const cartographic = Cesium.Cartographic.fromDegrees(point.lon, point.lat);
                 const terrainHeight = viewer.scene.globe.getHeight(cartographic) || 0;
-                const targetHeight = terrainHeight + 200; // Cinematic low flight (200m above ground)
+                const targetHeight = terrainHeight + altitude;
 
                 const destination = Cesium.Cartesian3.fromDegrees(point.lon, point.lat, targetHeight);
 
-                await this.flyToPoint(camera, destination);
+                await this.flyToPoint(camera, destination, speed);
             }
         } finally {
             this.isFlying = false;
@@ -38,12 +41,11 @@ export class AutopilotManager {
         }
     }
 
-    private flyToPoint(camera: Cesium.Camera, destination: Cesium.Cartesian3): Promise<void> {
+    private flyToPoint(camera: Cesium.Camera, destination: Cesium.Cartesian3, speed: number): Promise<void> {
         return new Promise((resolve) => {
             // Calculate distance for duration
             const currentPos = camera.position;
             const distance = Cesium.Cartesian3.distance(currentPos, destination);
-            const speed = 200; // meters per second (approx 720 km/h)
             const duration = Math.max(3, distance / speed); // Min 3 seconds
 
             camera.flyTo({

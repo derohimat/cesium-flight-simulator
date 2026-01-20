@@ -317,8 +317,8 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
     this.game.getInputManager().setThrottlePercent(percent * 100);
   }
 
-  public async flyPath(waypoints: { lat: number; lon: number }[]): Promise<void> {
-    await this.game.getAutopilotManager().flyPath(waypoints);
+  public async flyPath(waypoints: { lat: number; lon: number }[], options: { speed?: number; altitude?: number } = {}): Promise<void> {
+    await this.game.getAutopilotManager().flyPath(waypoints, options);
   }
 
   public startRecording(): void {
