@@ -351,11 +351,21 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
     this.game.getAutopilotManager().stopOrbit();
   }
 
-  public flyPathWithTargetLock(waypoints: { lat: number; lon: number }[], target: { lat: number; lon: number }, duration: number = 20): void {
-    const path = waypoints.map(wp => new Cesium.Cartographic(Cesium.Math.toRadians(wp.lon), Cesium.Math.toRadians(wp.lat), 300)); // Default 300m height
-    const targetCart = new Cesium.Cartographic(Cesium.Math.toRadians(target.lon), Cesium.Math.toRadians(target.lat), 0); // Target at ground? Or height logic? Assuming ground for "Look at City".
-
-    this.game.getAutopilotManager().flyPathWithTargetLock(path, targetCart, duration);
+  public flyPathWithTargetLock(waypoints: { lat: number; lon: number }[], target: { lat: number; lon: number }, options: { speed?: number; duration?: number } = {}): void {
+    const defaultAltitude = 300; 
+    const path = waypoints.map(wp => new Cesium.Cartographic(Cesium.Math.toRadians(wp.lon), Cesium.Math.toRadians(wp.lat), defaultAltitude)); // Flight altitude handling is inside AutopilotManager for spline sampling?
+    // Wait, flyPathWithTargetLock in AutopilotManager takes Cartographic[] path. 
+    // The previous implementation hardcoded 300m height in GameBridge map.
+    // The previous AutopilotManager implementation uses spline.evaluate(elapsed).
+    // If the path points have 300m height, the camera will fly at 300m height.
+    // We should probably allow altitude override here too?
+    // For now let's just update the signature to pass options.
+    
+    // Actually, let's respect the visual guide height if possible, but the path is just waypoints.
+    // Let's assume the user wants to fly AT the set altitude.
+    
+    const targetCart = new Cesium.Cartographic(Cesium.Math.toRadians(target.lon), Cesium.Math.toRadians(target.lat), 0);
+    this.game.getAutopilotManager().flyPathWithTargetLock(path, targetCart, options);
   }
 
   public stopLock(): void {

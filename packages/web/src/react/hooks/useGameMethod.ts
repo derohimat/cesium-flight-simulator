@@ -25,14 +25,14 @@ export function useGameMethod() {
     setMode: (mode: 'play' | 'builder') => bridge.setMode(mode),
     getMode: () => bridge.getMode(),
     setThrottle: (percent: number) => bridge.setThrottle(percent),
-    flyPath: (waypoints: { lat: number; lon: number }[]) => bridge.flyPath(waypoints),
+    flyPath: (waypoints: { lat: number; lon: number }[], options?: { speed?: number; altitude?: number }) => bridge.flyPath(waypoints, options),
     startRecording: () => bridge.startRecording(),
     stopRecording: (fileName?: string) => bridge.stopRecording(fileName),
     startOrbit: (lat: number, lon: number, height: number, radius?: number, speed?: number, onComplete?: () => void) =>
       bridge.startOrbit(lat, lon, height, radius, speed, onComplete),
     stopOrbit: () => bridge.stopOrbit(),
-    flyPathWithTargetLock: (waypoints: { lat: number; lon: number }[], target: { lat: number; lon: number }, duration?: number) =>
-      bridge.flyPathWithTargetLock(waypoints, target, duration),
+    flyPathWithTargetLock: (waypoints: { lat: number; lon: number }[], target: { lat: number; lon: number }, options?: { speed?: number; duration?: number }) =>
+      bridge.flyPathWithTargetLock(waypoints, target, options || {}),
     stopLock: () => bridge.stopLock(),
     setVehicleVisibility: (visible: boolean) => bridge.setVehicleVisibility(visible),
     showFlightGuide: (target: { lat: number; lon: number }) => bridge.showFlightGuide(target),

@@ -132,7 +132,7 @@ export class AutopilotManager {
     private lockListener: Cesium.Event.RemoveCallback | undefined;
     private isLocked: boolean = false;
 
-    public flyPathWithTargetLock(path: Cesium.Cartographic[], target: Cesium.Cartographic, totalDuration: number = 20) {
+    public flyPathWithTargetLock(path: Cesium.Cartographic[], target: Cesium.Cartographic, options: { speed?: number; duration?: number } = {}) {
         if (this.isLocked || path.length < 2) return;
         if (this.isOrbiting) this.stopOrbit();
         if (this.isFlying) this.isFlying = false; // Override normal flight if any
@@ -146,6 +146,20 @@ export class AutopilotManager {
 
         // Create Spline
         const cartesianPath = path.map(p => Cesium.Cartographic.toCartesian(p));
+
+        // Calculate Total Duration
+        let totalDuration = options.duration || 20;
+
+        // If speed is provided, it overrides duration (roughly)
+        if (options.speed && options.speed > 0) {
+            // Calculate total path length
+            let totalLength = 0;
+            for (let i = 0; i < cartesianPath.length - 1; i++) {
+                totalLength += Cesium.Cartesian3.distance(cartesianPath[i], cartesianPath[i + 1]);
+            }
+            totalDuration = totalLength / options.speed;
+        }
+
         // Time points (normalized 0 to 1 would be easier, then scale by duration)
         // Or specific times. Let's do equally spaced for simplicity of this demo.
         const times = cartesianPath.map((_, i) => i / (cartesianPath.length - 1) * totalDuration);
