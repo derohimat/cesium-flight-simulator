@@ -2,7 +2,7 @@ import { HUD } from '../features/hud/components/HUD';
 import { ControlsPanel } from '../features/controls/components/ControlsPanel';
 import { CameraControls } from '../features/camera/components/CameraControls';
 import { CrashScreen } from '../features/crash/components/CrashScreen';
-import { MiniMap } from '../features/minimap/components/MiniMap';
+import { DirectorPanel } from '../features/director/components/DirectorPanel';
 
 export function PlayModeUI() {
   return (
@@ -12,7 +12,7 @@ export function PlayModeUI() {
         <CameraControls />
       </div>
       <HUD />
-      <MiniMap />
+      <DirectorPanel />
       <CrashScreen />
     </>
   );

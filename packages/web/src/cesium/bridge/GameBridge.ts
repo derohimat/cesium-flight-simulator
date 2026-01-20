@@ -288,5 +288,41 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
   public setThrottle(percent: number): void {
     this.game.getInputManager().setThrottlePercent(percent * 100);
   }
+
+  public async flyPath(waypoints: { lat: number; lon: number }[]): Promise<void> {
+    await this.game.getAutopilotManager().flyPath(waypoints);
+  }
+
+  public startRecording(): void {
+    this.game.getRecordingManager().startRecording();
+  }
+
+  public stopRecording(): void {
+    this.game.getRecordingManager().stopRecording();
+  }
+
+  public startOrbit(lat: number, lon: number, height: number, radius: number = 200, speed: number = 0.5, onComplete?: () => void): void {
+    const center = new Cesium.Cartographic(
+      Cesium.Math.toRadians(lon),
+      Cesium.Math.toRadians(lat),
+      height
+    );
+    this.game.getAutopilotManager().startOrbit(center, radius, speed, onComplete);
+  }
+
+  public stopOrbit(): void {
+    this.game.getAutopilotManager().stopOrbit();
+  }
+
+  public flyPathWithTargetLock(waypoints: { lat: number; lon: number }[], target: { lat: number; lon: number }, duration: number = 20): void {
+    const path = waypoints.map(wp => new Cesium.Cartographic(Cesium.Math.toRadians(wp.lon), Cesium.Math.toRadians(wp.lat), 300)); // Default 300m height
+    const targetCart = new Cesium.Cartographic(Cesium.Math.toRadians(target.lon), Cesium.Math.toRadians(target.lat), 0); // Target at ground? Or height logic? Assuming ground for "Look at City".
+
+    this.game.getAutopilotManager().flyPathWithTargetLock(path, targetCart, duration);
+  }
+
+  public stopLock(): void {
+    this.game.getAutopilotManager().stopLock();
+  }
 }
 

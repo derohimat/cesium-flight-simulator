@@ -17,17 +17,13 @@
     "tailwindcss": "^3.4.16",
     "typescript": "~5.7.2",
     "vite": "^6.2.0",
-    "vite-plugin-static-copy": "^3.1.2"
+    "vite-plugin-cesium": "^1.2.23"
   },
   "dependencies": {
-    "@types/mapbox-gl": "^3.4.1",
-    "@types/node": "^22.14.0",
     "cesium": "^1.133.0",
     "clsx": "^2.1.1",
-    "mapbox-gl": "^3.15.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-map-gl": "^8.1.0",
     "tailwind-merge": "^2.5.5"
   }
 }

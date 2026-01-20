@@ -25,6 +25,15 @@ export function useGameMethod() {
     setMode: (mode: 'play' | 'builder') => bridge.setMode(mode),
     getMode: () => bridge.getMode(),
     setThrottle: (percent: number) => bridge.setThrottle(percent),
+    flyPath: (waypoints: { lat: number; lon: number }[]) => bridge.flyPath(waypoints),
+    startRecording: () => bridge.startRecording(),
+    stopRecording: () => bridge.stopRecording(),
+    startOrbit: (lat: number, lon: number, height: number, radius?: number, speed?: number, onComplete?: () => void) =>
+      bridge.startOrbit(lat, lon, height, radius, speed, onComplete),
+    stopOrbit: () => bridge.stopOrbit(),
+    flyPathWithTargetLock: (waypoints: { lat: number; lon: number }[], target: { lat: number; lon: number }, duration?: number) =>
+      bridge.flyPathWithTargetLock(waypoints, target, duration),
+    stopLock: () => bridge.stopLock(),
   };
 }
 

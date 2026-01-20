@@ -7,6 +7,8 @@ import { InputManager } from '../input/InputManager';
 import { ObjectManager } from '../builder/ObjectManager';
 import { PlacementController } from '../builder/PlacementController';
 import { TouchInputManager } from '../input/TouchInputManager';
+import { AutopilotManager } from '../managers/AutopilotManager';
+import { RecordingManager } from '../managers/RecordingManager';
 
 export class CesiumVehicleGame {
   private scene: Scene;
@@ -17,6 +19,8 @@ export class CesiumVehicleGame {
   private objectManager: ObjectManager;
   private placementController: PlacementController;
   private touchInputManager: TouchInputManager | null = null;
+  private autopilotManager: AutopilotManager;
+  private recordingManager: RecordingManager;
 
   constructor(containerId: string = "cesiumContainer") {
     this.scene = new Scene(containerId);
@@ -26,6 +30,8 @@ export class CesiumVehicleGame {
     this.inputManager = new InputManager();
     this.objectManager = new ObjectManager(this.scene.viewer);
     this.placementController = new PlacementController(this.scene.viewer, this.objectManager);
+    this.autopilotManager = new AutopilotManager(this);
+    this.recordingManager = new RecordingManager(this.scene);
 
     this.setupSystems();
     this.setupInputHandling();
@@ -146,6 +152,14 @@ export class CesiumVehicleGame {
 
   public getPlacementController(): PlacementController {
     return this.placementController;
+  }
+
+  public getAutopilotManager(): AutopilotManager {
+    return this.autopilotManager;
+  }
+
+  public getRecordingManager(): RecordingManager {
+    return this.recordingManager;
   }
 
   public destroy(): void {
