@@ -324,5 +324,9 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
   public stopLock(): void {
     this.game.getAutopilotManager().stopLock();
   }
+
+  public setVehicleVisibility(visible: boolean): void {
+    this.game.getVehicleManager().setVehicleVisibility(visible);
+  }
 }
 

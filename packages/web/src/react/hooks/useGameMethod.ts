@@ -34,6 +34,7 @@ export function useGameMethod() {
     flyPathWithTargetLock: (waypoints: { lat: number; lon: number }[], target: { lat: number; lon: number }, duration?: number) =>
       bridge.flyPathWithTargetLock(waypoints, target, duration),
     stopLock: () => bridge.stopLock(),
+    setVehicleVisibility: (visible: boolean) => bridge.setVehicleVisibility(visible),
   };
 }
 

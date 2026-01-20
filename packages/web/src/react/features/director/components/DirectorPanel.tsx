@@ -14,7 +14,7 @@ export function DirectorPanel() {
   const [isPortrait, setIsPortrait] = useState(false);
   const [autoRecord, setAutoRecord] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
-  const { flyPath, startRecording, stopRecording, startOrbit, flyPathWithTargetLock } = useGameMethod();
+  const { flyPath, startRecording, stopRecording, startOrbit, flyPathWithTargetLock, setVehicleVisibility } = useGameMethod();
 
   const [cityName, setCityName] = useState('');
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
@@ -136,6 +136,16 @@ export function DirectorPanel() {
             >
               🎥 Auto-Record: {autoRecord ? 'ON' : 'OFF'}
             </button>
+            <label className="col-span-2 flex items-center gap-2 px-2 py-1 bg-white/5 rounded cursor-pointer mt-1">
+              <input
+                type="checkbox"
+                onChange={(e) => {
+                  setVehicleVisibility(!e.target.checked);
+                }}
+                className="w-4 h-4 rounded border-white/20 bg-white/10 text-blue-500 focus:ring-offset-0 focus:ring-1 focus:ring-blue-500"
+              />
+              <span className="text-xs text-white/70">Hide Aircraft (Invisible Mode)</span>
+            </label>
           </div>
 
           {/* Input Section */}

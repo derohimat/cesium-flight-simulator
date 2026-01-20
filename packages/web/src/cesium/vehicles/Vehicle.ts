@@ -126,6 +126,12 @@ export abstract class Vehicle implements Updatable {
     return this.isReady;
   }
 
+  public setVisible(visible: boolean): void {
+    if (this.primitive) {
+      this.primitive.show = visible;
+    }
+  }
+
   protected updateModelMatrix(): void {
     if (this.primitive) {
       Vehicle.scratchHPR.heading = this.hpRoll.heading + this.modelHeadingOffset;
