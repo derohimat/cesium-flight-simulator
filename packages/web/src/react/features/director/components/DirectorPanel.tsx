@@ -26,7 +26,8 @@ export function DirectorPanel() {
     setVehicleVisibility,
     getCurrentCameraPosition,
     showFlightGuide,
-    hideFlightGuide
+    hideFlightGuide,
+    setCameraSpeed
   } = useGameMethod();
 
   const cameraPosition = useCameraPosition();
@@ -42,6 +43,11 @@ export function DirectorPanel() {
   // New State for Flight Parameters
   const [flightAltitude, setFlightAltitude] = useState(200);
   const [flightSpeed, setFlightSpeed] = useState(200);
+
+  // Sync Camera Speed with Flight Speed slider
+  useEffect(() => {
+    setCameraSpeed(flightSpeed);
+  }, [flightSpeed, setCameraSpeed]);
 
   // Effect to show/hide flight guide based on target (last waypoint)
   useEffect(() => {

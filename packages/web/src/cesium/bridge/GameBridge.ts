@@ -375,5 +375,9 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
   public setVehicleVisibility(visible: boolean): void {
     this.game.getVehicleManager().setVehicleVisibility(visible);
   }
+
+  public setCameraSpeed(speed: number): void {
+    this.modeManager.setCameraSpeed(speed);
+  }
 }
 

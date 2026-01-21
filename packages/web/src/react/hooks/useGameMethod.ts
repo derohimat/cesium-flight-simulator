@@ -38,6 +38,7 @@ export function useGameMethod() {
     showFlightGuide: (target: { lat: number; lon: number }) => bridge.showFlightGuide(target),
     hideFlightGuide: () => bridge.hideFlightGuide(),
     getCurrentCameraPosition: () => bridge.getCurrentCameraPosition(),
+    setCameraSpeed: (speed: number) => bridge.setCameraSpeed(speed),
   };
 }
 
