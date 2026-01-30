@@ -10,6 +10,12 @@ export function ControlsPanel() {
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in form fields
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) {
+        return;
+      }
+
       if (e.key === '?' || (e.shiftKey && e.key === '/')) {
         e.preventDefault();
         setIsOpen(prev => !prev);
