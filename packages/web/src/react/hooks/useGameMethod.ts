@@ -39,6 +39,10 @@ export function useGameMethod() {
     hideFlightGuide: () => bridge.hideFlightGuide(),
     getCurrentCameraPosition: () => bridge.getCurrentCameraPosition(),
     setCameraSpeed: (speed: number) => bridge.setCameraSpeed(speed),
+    // Auto altitude methods for best view
+    calculateAutoAltitude: (lng: number, lat: number) => bridge.calculateAutoAltitude(lng, lat),
+    calculateAutoAltitudeForPath: (waypoints: { lat: number; lon: number }[]) => bridge.calculateAutoAltitudeForPath(waypoints),
+    getAltitudePresets: (lng: number, lat: number) => bridge.getAltitudePresets(lng, lat),
   };
 }
 

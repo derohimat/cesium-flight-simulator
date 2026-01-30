@@ -379,5 +379,39 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
   public setCameraSpeed(speed: number): void {
     this.modeManager.setCameraSpeed(speed);
   }
+
+  /**
+   * Calculate optimal altitude for best view at a location
+   */
+  public calculateAutoAltitude(lng: number, lat: number): { altitude: number; sceneType: string } | null {
+    const terrainAvoidance = this.game.getAutopilotManager().getTerrainAvoidance();
+    if (!terrainAvoidance) return null;
+
+    const result = terrainAvoidance.calculateAutoAltitude(lng, lat);
+    return {
+      altitude: Math.round(result.recommendedAltitude),
+      sceneType: result.sceneType
+    };
+  }
+
+  /**
+   * Calculate optimal altitude for a flight path
+   */
+  public calculateAutoAltitudeForPath(waypoints: { lat: number; lon: number }[]): number | null {
+    const terrainAvoidance = this.game.getAutopilotManager().getTerrainAvoidance();
+    if (!terrainAvoidance) return null;
+
+    return terrainAvoidance.calculateAutoAltitudeForPath(waypoints);
+  }
+
+  /**
+   * Get altitude presets for current camera position
+   */
+  public getAltitudePresets(lng: number, lat: number): { preset: string; altitude: number; description: string }[] | null {
+    const terrainAvoidance = this.game.getAutopilotManager().getTerrainAvoidance();
+    if (!terrainAvoidance) return null;
+
+    return terrainAvoidance.getAltitudePresets(lng, lat);
+  }
 }
 
