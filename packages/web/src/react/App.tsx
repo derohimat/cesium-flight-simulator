@@ -1,6 +1,6 @@
 import { IntroScreen } from './shared/components/IntroScreen';
 import { DebugPanel } from './features/debug/components/DebugPanel';
-import { PlayModeUI } from './layouts/PlayModeUI';
+import { StudioModeUI } from './layouts/StudioModeUI';
 import { BuilderModeUI } from './layouts/BuilderModeUI';
 import { ModeToggle } from './features/builder/components/ModeToggle';
 import { useGameMode } from './hooks/useGameMode';
@@ -13,7 +13,6 @@ import { RecordingStatus } from './features/hud/components/RecordingStatus';
 
 export function App() {
   const { mode } = useGameMode();
-
   const isMobile = isMobileDevice();
   const { setThrottle } = useGameMethod();
 
@@ -27,20 +26,24 @@ export function App() {
       <IntroScreen />
       <DebugPanel />
       
-      {/* Mode toggle button (temporary for testing) */}
+      {/* Mode toggle button */}
       <div className="fixed bottom-4 right-4 z-50 pointer-events-auto">
         <ModeToggle />
       </div>
       
       {/* Mode-specific UI */}
-      {mode === 'play' && !isMobile && <PlayModeUI />}
+      {mode === 'play' && !isMobile && <StudioModeUI />}
       {mode === 'builder' && <BuilderModeUI />}
-      <HUD   />
+
+      {/* Always visible HUD */}
+      <HUD />
+
+      {/* Mobile controls */}
       {isMobile && <ThrottleSlider onChange={handleThrottleChange} />}
+
+      {/* Overlays */}
       <CrashScreen />
       <RecordingStatus />
     </>
   );
 }
-
-

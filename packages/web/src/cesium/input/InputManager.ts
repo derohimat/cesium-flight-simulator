@@ -131,8 +131,29 @@ export class InputManager {
     }
   }
 
+  private isTypingInFormField(event: KeyboardEvent): boolean {
+    const target = event.target as HTMLElement;
+    if (!target) return false;
+
+    // Check if target is an input element
+    const tagName = target.tagName.toLowerCase();
+    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
+      return true;
+    }
+
+    // Check for contenteditable elements
+    if (target.isContentEditable) {
+      return true;
+    }
+
+    return false;
+  }
+
   private handleKeyDown(event: KeyboardEvent): void {
     if (this.isInputLocked) return;
+
+    // Skip game shortcuts when typing in form fields
+    if (this.isTypingInFormField(event)) return;
 
     const action = this.keyBindings[event.code] as InputAction;
     if (!action) return;
@@ -156,6 +177,9 @@ export class InputManager {
 
   private handleKeyUp(event: KeyboardEvent): void {
     if (this.isInputLocked) return;
+
+    // Skip game shortcuts when typing in form fields
+    if (this.isTypingInFormField(event)) return;
 
     const action = this.keyBindings[event.code] as InputAction;
     if (!action || this.oneTimeActions.has(action)) return;
