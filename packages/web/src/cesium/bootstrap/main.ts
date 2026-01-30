@@ -123,6 +123,10 @@ export class CesiumVehicleGame {
 
   public start(): void {
     this.gameLoop.start();
+
+    // Initialize terrain avoidance system for content creation
+    this.autopilotManager.initTerrainAvoidance();
+
     console.log('🚀 Cesium Vehicle Game started!');
   }
 

@@ -1,13 +1,42 @@
 import * as Cesium from 'cesium';
 import { CesiumVehicleGame } from '../bootstrap/main';
+import { TerrainAvoidanceSystem } from './TerrainAvoidanceSystem';
 
 export class AutopilotManager {
     private game: CesiumVehicleGame;
     private isFlying: boolean = false;
     private guideLineEntity?: Cesium.Entity;
+    private terrainAvoidance: TerrainAvoidanceSystem | null = null;
+
+    // Content creation mode settings
+    private contentCreationMode: boolean = true; // Always on for safety
 
     constructor(game: CesiumVehicleGame) {
         this.game = game;
+    }
+
+    /**
+     * Initialize terrain avoidance system (call after viewer is ready)
+     */
+    public initTerrainAvoidance(): void {
+        const viewer = this.game.getScene().viewer;
+        this.terrainAvoidance = new TerrainAvoidanceSystem(viewer);
+        console.log('🛡️ Terrain Avoidance System initialized');
+    }
+
+    /**
+     * Get the terrain avoidance system
+     */
+    public getTerrainAvoidance(): TerrainAvoidanceSystem | null {
+        return this.terrainAvoidance;
+    }
+
+    /**
+     * Set content creation mode (enables/disables safety features)
+     */
+    public setContentCreationMode(enabled: boolean): void {
+        this.contentCreationMode = enabled;
+        console.log(`🎬 Content Creation Mode: ${enabled ? 'ON' : 'OFF'}`);
     }
 
     public async flyPath(waypoints: { lat: number; lon: number }[], options: { speed?: number; altitude?: number } = {}) {
@@ -19,20 +48,60 @@ export class AutopilotManager {
         const viewer = this.game.getScene().viewer;
         const camera = viewer.camera;
 
-        const speed = options.speed || 200; // Default 200 m/s
-        const altitude = options.altitude || 200; // Default 200m
+        // Apply speed limits for content creation
+        let speed = options.speed || TerrainAvoidanceSystem.DEFAULT_SPEED;
+        if (this.contentCreationMode && this.terrainAvoidance) {
+            speed = this.terrainAvoidance.clampSpeed(speed);
+        }
 
-        console.log(`✈️ Starting Autopilot Flight (Speed: ${speed}m/s, Alt: ${altitude}m)...`);
+        const baseAltitude = options.altitude || 200;
+
+        console.log(`✈️ Starting Autopilot Flight (Speed: ${speed}m/s, Base Alt: ${baseAltitude}m)...`);
 
         try {
-            for (const point of waypoints) {
-                const cartographic = Cesium.Cartographic.fromDegrees(point.lon, point.lat);
-                const terrainHeight = viewer.scene.globe.getHeight(cartographic) || 0;
-                const targetHeight = terrainHeight + altitude;
+            // Adjust path for terrain avoidance if enabled
+            let adjustedWaypoints: { lat: number; lon: number; altitude: number }[];
 
-                const destination = Cesium.Cartesian3.fromDegrees(point.lon, point.lat, targetHeight);
+            if (this.contentCreationMode && this.terrainAvoidance) {
+                adjustedWaypoints = this.terrainAvoidance.adjustPathForTerrainAvoidance(
+                    waypoints,
+                    baseAltitude
+                );
+                console.log('🛡️ Path adjusted for terrain avoidance');
+            } else {
+                // Simple path without avoidance
+                adjustedWaypoints = waypoints.map(wp => {
+                    const terrainHeight = viewer.scene.globe.getHeight(
+                        Cesium.Cartographic.fromDegrees(wp.lon, wp.lat)
+                    ) || 0;
+                    return {
+                        lat: wp.lat,
+                        lon: wp.lon,
+                        altitude: terrainHeight + baseAltitude
+                    };
+                });
+            }
 
-                await this.flyToPoint(camera, destination, speed);
+            for (const point of adjustedWaypoints) {
+                // Dynamic speed adjustment based on terrain ahead
+                let pointSpeed = speed;
+                if (this.contentCreationMode && this.terrainAvoidance) {
+                    const cameraCart = Cesium.Cartographic.fromCartesian(camera.position);
+                    pointSpeed = this.terrainAvoidance.calculateDynamicSpeed(
+                        Cesium.Math.toDegrees(cameraCart.longitude),
+                        Cesium.Math.toDegrees(cameraCart.latitude),
+                        Cesium.Math.toDegrees(camera.heading),
+                        cameraCart.height
+                    );
+                }
+
+                const destination = Cesium.Cartesian3.fromDegrees(
+                    point.lon,
+                    point.lat,
+                    point.altitude
+                );
+
+                await this.flyToPointWithAvoidance(camera, destination, pointSpeed, viewer);
             }
         } finally {
             this.isFlying = false;
@@ -41,17 +110,41 @@ export class AutopilotManager {
         }
     }
 
-    private flyToPoint(camera: Cesium.Camera, destination: Cesium.Cartesian3, speed: number): Promise<void> {
+    private flyToPointWithAvoidance(
+        camera: Cesium.Camera,
+        destination: Cesium.Cartesian3,
+        speed: number,
+        _viewer?: Cesium.Viewer // Optional, kept for API compatibility
+    ): Promise<void> {
         return new Promise((resolve) => {
-            // Calculate distance for duration
             const currentPos = camera.position;
             const distance = Cesium.Cartesian3.distance(currentPos, destination);
-            const duration = Math.max(3, distance / speed); // Min 3 seconds
+            const duration = Math.max(3, distance / speed);
+
+            // Check if destination is safe
+            if (this.contentCreationMode && this.terrainAvoidance) {
+                const destCart = Cesium.Cartographic.fromCartesian(destination);
+                const safeAlt = this.terrainAvoidance.calculateSafeAltitude(
+                    Cesium.Math.toDegrees(destCart.longitude),
+                    Cesium.Math.toDegrees(destCart.latitude),
+                    destCart.height
+                );
+
+                if (safeAlt > destCart.height) {
+                    // Adjust destination altitude for safety
+                    destination = Cesium.Cartesian3.fromDegrees(
+                        Cesium.Math.toDegrees(destCart.longitude),
+                        Cesium.Math.toDegrees(destCart.latitude),
+                        safeAlt
+                    );
+                    console.log(`⚠️ Altitude adjusted to ${safeAlt.toFixed(0)}m for safety`);
+                }
+            }
 
             camera.flyTo({
                 destination: destination,
                 orientation: {
-                    heading: camera.heading, // Maintain or calculate new heading?
+                    heading: camera.heading,
                     pitch: Cesium.Math.toRadians(-20),
                     roll: 0.0,
                 },
@@ -64,6 +157,11 @@ export class AutopilotManager {
                 }
             });
         });
+    }
+
+    // Legacy method for backward compatibility
+    private _flyToPoint(camera: Cesium.Camera, destination: Cesium.Cartesian3, speed: number): Promise<void> {
+        return this.flyToPointWithAvoidance(camera, destination, speed);
     }
 
     private orbitListener: Cesium.Event.RemoveCallback | undefined;
