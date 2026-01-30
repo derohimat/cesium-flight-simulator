@@ -27,7 +27,10 @@ export function DirectorPanel() {
     getCurrentCameraPosition,
     showFlightGuide,
     hideFlightGuide,
-    setCameraSpeed
+    setCameraSpeed,
+    teleportTo,
+    calculateAutoAltitude,
+    calculateAutoAltitudeForPath
   } = useGameMethod();
 
   const cameraPosition = useCameraPosition();
@@ -42,7 +45,22 @@ export function DirectorPanel() {
 
   // New State for Flight Parameters
   const [flightAltitude, setFlightAltitude] = useState(200);
-  const [flightSpeed, setFlightSpeed] = useState(200);
+  const [flightSpeed, setFlightSpeed] = useState(60); // Content-creation default: 60 m/s
+
+  // Speed presets for content creation
+  const SPEED_PRESETS = [
+    { label: 'Slow', value: 30, description: 'Detail shots' },
+    { label: 'Normal', value: 60, description: 'Standard' },
+    { label: 'Fast', value: 100, description: 'Dynamic' },
+  ];
+
+  // Content creation speed limits
+  const MIN_SPEED = 20;
+  const MAX_SPEED = 150;
+
+  // Auto altitude state
+  const [autoAltitudeMode, setAutoAltitudeMode] = useState(false);
+  const [sceneType, setSceneType] = useState<string | null>(null);
 
   // Sync Camera Speed with Flight Speed slider
   useEffect(() => {
@@ -111,11 +129,9 @@ export function DirectorPanel() {
     stopOrbit();
     stopLock();
 
+    // Get current position for non-linear flight modes
     const currentPos = getCurrentCameraPosition();
     const startPoint = { lat: currentPos.latitude, lon: currentPos.longitude, name: 'Start' };
-
-    // For linear flight, we fly FROM current camera position TO the waypoints
-    const flightPath = flightMode === 'linear' ? [startPoint, ...waypoints] : waypoints;
 
     if (autoRecord) {
       startRecording();
@@ -124,8 +140,16 @@ export function DirectorPanel() {
 
     try {
       if (flightMode === 'linear') {
-        console.log('Flight Plan created:', flightPath);
-        await flyPath(flightPath.map(wp => ({ lat: wp.lat, lon: wp.lon })), { speed: flightSpeed, altitude: flightAltitude });
+        // Teleport to first waypoint as entry point, then fly the full path
+        const entryPoint = waypoints[0];
+        console.log('Teleporting to entry point:', entryPoint.name);
+        teleportTo(entryPoint.lon, entryPoint.lat, flightAltitude);
+
+        // Small delay to ensure teleport completes before starting flight
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        console.log('Flight Plan created:', waypoints);
+        await flyPath(waypoints.map(wp => ({ lat: wp.lat, lon: wp.lon })), { speed: flightSpeed, altitude: flightAltitude });
       } else if (flightMode === 'orbit') {
         const target = waypoints[waypoints.length - 1];
         startOrbit(target.lat, target.lon, flightAltitude, orbitRadius, 0.2, () => {
@@ -238,6 +262,11 @@ export function DirectorPanel() {
               />
               <span className="text-xs text-white/70">Hide Aircraft (Invisible Mode)</span>
             </label>
+            {/* Terrain Avoidance Status */}
+            <div className="col-span-2 flex items-center gap-2 px-2 py-1 bg-green-900/30 rounded border border-green-500/30 mt-1">
+              <span className="text-green-400">🛡️</span>
+              <span className="text-xs text-green-300">Terrain Avoidance Active</span>
+            </div>
           </div>
 
           {/* Input Section */}
@@ -278,7 +307,16 @@ export function DirectorPanel() {
               <div className="space-y-1">
                 <div className="flex justify-between text-xs text-white/70">
                   <span>Flight Altitude</span>
-                  <span>{flightAltitude}m</span>
+                  <div className="flex items-center gap-2">
+                    {sceneType && (
+                      <span className="text-[10px] text-future-accent bg-future-primary/20 px-1 rounded">
+                        {sceneType}
+                      </span>
+                    )}
+                    <span className={autoAltitudeMode ? 'text-green-400' : ''}>
+                      {flightAltitude}m
+                    </span>
+                  </div>
                 </div>
                 <input
                   type="range"
@@ -286,26 +324,81 @@ export function DirectorPanel() {
                   max="2000"
                   step="50"
                   value={flightAltitude}
-                  onChange={(e) => setFlightAltitude(Number(e.target.value))}
+                  onChange={(e) => {
+                    setFlightAltitude(Number(e.target.value));
+                    setAutoAltitudeMode(false);
+                    setSceneType(null);
+                  }}
                   className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer"
                 />
+                {/* Auto Altitude Button */}
+                <div className="flex gap-1 mt-1">
+                  <button
+                    onClick={() => {
+                      // Calculate auto altitude based on waypoints or current position
+                      if (waypoints.length > 0) {
+                        const autoAlt = calculateAutoAltitudeForPath(waypoints);
+                        if (autoAlt) {
+                          setFlightAltitude(autoAlt);
+                          setAutoAltitudeMode(true);
+                          // Get scene type from first waypoint
+                          const wp = waypoints[0];
+                          const result = calculateAutoAltitude(wp.lon, wp.lat);
+                          if (result) setSceneType(result.sceneType);
+                        }
+                      } else {
+                        // Use current camera position
+                        const pos = getCurrentCameraPosition();
+                        const result = calculateAutoAltitude(pos.longitude, pos.latitude);
+                        if (result) {
+                          setFlightAltitude(result.altitude);
+                          setAutoAltitudeMode(true);
+                          setSceneType(result.sceneType);
+                        }
+                      }
+                    }}
+                    className={`flex-1 text-[10px] py-1.5 px-2 rounded transition-colors flex items-center justify-center gap-1 ${autoAltitudeMode
+                        ? 'bg-green-500/30 text-green-300 border border-green-500/50'
+                        : 'bg-white/10 text-white/60 hover:bg-white/20 border border-transparent'
+                      }`}
+                    title="Automatically calculate best viewing altitude based on terrain"
+                  >
+                    ✨ Auto Best View
+                  </button>
+                </div>
               </div>
 
               {/* Speed Slider */}
               <div className="space-y-1">
                 <div className="flex justify-between text-xs text-white/70">
                   <span>Flight Speed</span>
-                  <span>{flightSpeed}m/s</span>
+                  <span className="text-future-accent">{flightSpeed}m/s</span>
                 </div>
                 <input
                   type="range"
-                  min="10"
-                  max="500"
-                  step="10"
+                  min={MIN_SPEED}
+                  max={MAX_SPEED}
+                  step="5"
                   value={flightSpeed}
                   onChange={(e) => setFlightSpeed(Number(e.target.value))}
                   className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer"
                 />
+                {/* Speed Presets */}
+                <div className="flex gap-1 mt-1">
+                  {SPEED_PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      onClick={() => setFlightSpeed(preset.value)}
+                      className={`flex-1 text-[10px] py-1 px-1 rounded transition-colors ${flightSpeed === preset.value
+                        ? 'bg-future-primary text-white'
+                        : 'bg-white/10 text-white/60 hover:bg-white/20'
+                        }`}
+                      title={preset.description}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
