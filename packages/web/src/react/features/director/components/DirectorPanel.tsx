@@ -1,24 +1,32 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Panel } from '../../../shared/components/Panel';
 import { useGameMethod } from '../../../hooks/useGameMethod';
 import { useCameraPosition } from '../../../hooks/useCameraPosition';
+import { TelemetryHUD } from './sections/TelemetryHUD';
+import { FlightSettings } from './sections/FlightSettings';
+import { WaypointSearch } from './sections/WaypointSearch';
+import { FlightControls } from './sections/FlightControls';
+import { WaypointList } from './sections/WaypointList';
+import { cn } from '../../../shared/utils/cn';
 
-interface Waypoint {
+export interface Waypoint {
   lat: number;
   lon: number;
   name: string;
 }
 
-type FlightMode = 'linear' | 'orbit' | 'lock';
+export type FlightMode = 'linear' | 'orbit' | 'lock';
 
 export function DirectorPanel() {
   const [isPortrait, setIsPortrait] = useState(false);
   const [autoRecord, setAutoRecord] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
+  const [vehicleVisibility, setVisibility] = useState(true); // Internal state to match prop name
+
   const {
     flyPath,
     startRecording,
-    stopRecording,
+    stopRecording: stopRec,
     startOrbit,
     stopOrbit,
     stopLock,
@@ -35,32 +43,23 @@ export function DirectorPanel() {
 
   const cameraPosition = useCameraPosition();
 
-  const [cityName, setCityName] = useState('');
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // New State for Flight Modes
+  // Flight Modes State
   const [flightMode, setFlightMode] = useState<FlightMode>('linear');
   const [orbitRadius, setOrbitRadius] = useState(500);
 
-  // New State for Flight Parameters
+  // Flight Parameters State
   const [flightAltitude, setFlightAltitude] = useState(200);
-  const [flightSpeed, setFlightSpeed] = useState(60); // Content-creation default: 60 m/s
-
-  // Speed presets for content creation
-  const SPEED_PRESETS = [
-    { label: 'Slow', value: 30, description: 'Detail shots' },
-    { label: 'Normal', value: 60, description: 'Standard' },
-    { label: 'Fast', value: 100, description: 'Dynamic' },
-  ];
-
-  // Content creation speed limits
-  const MIN_SPEED = 20;
-  const MAX_SPEED = 150;
+  const [flightSpeed, setFlightSpeed] = useState(60); 
 
   // Auto altitude state
   const [autoAltitudeMode, setAutoAltitudeMode] = useState(false);
   const [sceneType, setSceneType] = useState<string | null>(null);
+
+  // UI State
+  const [isSettingsOpen, setIsSettingsOpen] = useState(true);
 
   // Sync Camera Speed with Flight Speed slider
   useEffect(() => {
@@ -77,28 +76,32 @@ export function DirectorPanel() {
     }
   }, [waypoints, showFlightGuide, hideFlightGuide]);
 
-  // Toggle Portrait Mode
-  const togglePortrait = () => {
-    setIsPortrait(!isPortrait);
-    if (!isPortrait) {
-      document.body.classList.add('portrait-mode');
-    } else {
-      document.body.classList.remove('portrait-mode');
-    }
-    // Trigger window resize event to ensure Cesium updates
-    setTimeout(() => {
-      window.dispatchEvent(new Event('resize'));
-    }, 100);
-  };
+  // Handlers wrapped in useCallback for stable props to memoized children
+  const handleTogglePortrait = useCallback(() => {
+    setIsPortrait(prev => {
+      const newVal = !prev;
+      if (newVal) {
+        document.body.classList.add('portrait-mode');
+      } else {
+        document.body.classList.remove('portrait-mode');
+      }
+        setTimeout(() => window.dispatchEvent(new Event('resize')), 100);
+        return newVal;
+      });
+  }, []);
 
-  // Nominatim API Search
-  const searchCity = async () => {
-    if (!cityName.trim()) return;
+  const handleToggleAutoRecord = useCallback(() => setAutoRecord(p => !p), []);
 
+  const handleToggleVehicleVisibility = useCallback((val: boolean) => {
+    setVisibility(val);
+    setVehicleVisibility(val);
+  }, [setVehicleVisibility]);
+
+  const handleSearch = useCallback(async (city: string) => {
     setIsSearching(true);
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cityName)}&format=json&limit=1`
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`
       );
       const data = await response.json();
 
@@ -107,29 +110,53 @@ export function DirectorPanel() {
         const newWaypoint: Waypoint = {
           lat: parseFloat(result.lat),
           lon: parseFloat(result.lon),
-          name: result.display_name.split(',')[0] // Keep name short
+          name: result.display_name.split(',')[0]
         };
-
-        console.log('Geocoded:', newWaypoint); // Verification requirement
-        setWaypoints([...waypoints, newWaypoint]);
-        setCityName(''); // Clear input after add
+        setWaypoints(prev => [...prev, newWaypoint]);
       }
     } catch (error) {
       console.error('Geocoding error:', error);
     } finally {
       setIsSearching(false);
     }
-  };
+  }, []);
+
+  const handleRemoveWaypoint = useCallback((index: number) => {
+    setWaypoints(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleClearWaypoints = useCallback(() => {
+    setWaypoints([]);
+  }, []);
+
+  const handleAutoAltitude = useCallback(() => {
+    if (waypoints.length > 0) {
+      const autoAlt = calculateAutoAltitudeForPath(waypoints);
+      if (autoAlt) {
+        setFlightAltitude(autoAlt);
+        setAutoAltitudeMode(true);
+        const wp = waypoints[0];
+        const result = calculateAutoAltitude(wp.lon, wp.lat);
+        if (result) setSceneType(result.sceneType);
+      }
+    } else {
+      const pos = getCurrentCameraPosition();
+      const result = calculateAutoAltitude(pos.longitude, pos.latitude);
+      if (result) {
+        setFlightAltitude(result.altitude);
+        setAutoAltitudeMode(true);
+        setSceneType(result.sceneType);
+      }
+    }
+  }, [waypoints, calculateAutoAltitude, calculateAutoAltitudeForPath, getCurrentCameraPosition]);
 
   const handleStartFlight = async () => {
     if (waypoints.length === 0) return;
 
-    // cleanup
     hideFlightGuide();
     stopOrbit();
     stopLock();
 
-    // Get current position for non-linear flight modes
     const currentPos = getCurrentCameraPosition();
     const startPoint = { lat: currentPos.latitude, lon: currentPos.longitude, name: 'Start' };
 
@@ -140,338 +167,132 @@ export function DirectorPanel() {
 
     try {
       if (flightMode === 'linear') {
-        // Teleport to first waypoint as entry point, then fly the full path
         const entryPoint = waypoints[0];
-        console.log('Teleporting to entry point:', entryPoint.name);
         teleportTo(entryPoint.lon, entryPoint.lat, flightAltitude);
-
-        // Small delay to ensure teleport completes before starting flight
         await new Promise(resolve => setTimeout(resolve, 500));
-
-        console.log('Flight Plan created:', waypoints);
         await flyPath(waypoints.map(wp => ({ lat: wp.lat, lon: wp.lon })), { speed: flightSpeed, altitude: flightAltitude });
       } else if (flightMode === 'orbit') {
         const target = waypoints[waypoints.length - 1];
         startOrbit(target.lat, target.lon, flightAltitude, orbitRadius, 0.2, () => {
-          console.log("Orbit complete.");
           if (autoRecord) {
             const filename = `arrival-${target.name.replace(/\s+/g, '-')}-${flightAltitude}m-orbit.mp4`;
-            stopRecording(filename);
-            setIsRecording(false);
-          }
+             stopRec(filename);
+             setIsRecording(false);
+           }
         });
       } else if (flightMode === 'lock') {
-        if (waypoints.length >= 1) { // We can start lock from current pos to target if we have 1 waypoint? 
-        // The original logic required 2 waypoints in list. 
-        // Now we use current pos as start.
-        // If we have 1 waypoint (Target), we fly from Current -> Target with lock?
-        // flyPathWithTargetLock takes a PATH and a TARGET.
-        // Let's assume path is Start -> Target (or nearby).
-          const target = waypoints[waypoints.length - 1];
-
-          // If we want a flyby with lock, we might need more logic. 
-          // For now, let's keep original behavior: path is valid waypoints list minus target?
-          // Or better: Fly from Current Position around/towards target?
-          // Let's stick to using the waypoints list as the path, but prepend start?
-          // Actually, `flyPathWithTargetLock` expects the path to be the camera path. 
-          // Updated logic: Path = [Start, ...waypoints excluding last? or all?]
-          // If flightMode is lock, Usually 1st point is start, last point is target? 
-          // Let's use [Start, ...waypoints] as path, and Target is the LAST one.
-          const lockPath = [startPoint, ...waypoints];
-          // The target to lock ON is the last waypoint.
-          // Pass speed to flyPathWithTargetLock options
-          flyPathWithTargetLock(lockPath.map(p => ({ lat: p.lat, lon: p.lon })), { lat: target.lat, lon: target.lon }, { speed: flightSpeed }); 
-        }
+        const target = waypoints[waypoints.length - 1];
+        const lockPath = [startPoint, ...waypoints];
+        flyPathWithTargetLock(lockPath.map(p => ({ lat: p.lat, lon: p.lon })), { lat: target.lat, lon: target.lon }, { speed: flightSpeed });
       }
     } catch (e) {
       console.error("Flight failed", e);
     }
 
-    // specific handling for linear completion or manual stop is tricky because flyPath is async but might return early? 
-    // flyPath awaits completion.
-    // So for linear:
-    if (flightMode === 'linear') {
-      if (autoRecord) {
-        const target = waypoints[waypoints.length - 1];
-        const filename = `arrival-${target.name.replace(/\s+/g, '-')}-${flightAltitude}m-${flightSpeed}ms.mp4`;
-        stopRecording(filename);
-        setIsRecording(false);
-      }
+    if (flightMode === 'linear' && autoRecord) {
+      const target = waypoints[waypoints.length - 1];
+      const filename = `arrival-${target.name.replace(/\s+/g, '-')}-${flightAltitude}m-${flightSpeed}ms.mp4`;
+      stopRec(filename);
+      setIsRecording(false);
     }
   };
 
   const handleStopRecording = () => {
-    stopRecording();
+    stopRec();
     setIsRecording(false);
   };
 
-  const isStartDisabled = () => {
+  const isStartDisabled = useMemo(() => {
     if (flightMode === 'linear' && waypoints.length < 1) return true;
     if (flightMode === 'orbit' && waypoints.length < 1) return true;
-    if (flightMode === 'lock' && waypoints.length < 1) return true; // Changed to 1 as we use current pos
+    if (flightMode === 'lock' && waypoints.length < 1) return true; 
     return false;
-  };
+  }, [flightMode, waypoints]);
 
   return (
-    <div className="fixed top-8 left-8 z-50 w-80 pointer-events-auto">
-      <Panel title="🎬 Director Mode">
-        <div className="space-y-4 p-1">
-          {/* HUD Telemetry Section */}
-          <div className="bg-black/60 p-2 rounded border border-white/10 font-mono text-xs space-y-1">
-            <div className="flex justify-between text-white/70">
-              <span>LAT: {cameraPosition.latitude}</span>
-              <span>LON: {cameraPosition.longitude}</span>
-            </div>
-            <div className="flex justify-between text-white/70">
-              <span>ALT: {cameraPosition.altitude}m</span>
-              <span>HDG: {cameraPosition.heading}°</span>
-            </div>
-            <div className="flex justify-between text-white/50 text-[10px]">
-              <span>PITCH: {cameraPosition.pitch}°</span>
-              <span>ROLL: {cameraPosition.roll}°</span>
-            </div>
-          </div>
+    <div className="fixed top-8 left-8 z-50 w-80 pointer-events-auto flex flex-col gap-2 max-h-[85vh]">
+      <Panel title="🎬 Director Mode" className="p-0 overflow-hidden flex flex-col">
+        {/* Sticky Header with Telemetry */}
+        <div className="p-3 bg-black/40 border-b border-white/10 backdrop-blur-xl">
+          <TelemetryHUD cameraPosition={cameraPosition} />
 
-          {/* Settings Section */}
-          <div className="grid grid-cols-2 gap-2 bg-white/5 p-2 rounded">
-            <button
-              onClick={togglePortrait}
-              className={`text-xs py-1 px-2 rounded border transition-colors ${isPortrait
-                ? 'bg-purple-600 border-purple-500 text-white'
-                : 'bg-transparent border-white/20 text-white/50 hover:text-white'
-                }`}
-            >
-              📱 Portrait (9:16)
-            </button>
-            <button
-              onClick={() => setAutoRecord(!autoRecord)}
-              className={`text-xs py-1 px-2 rounded border transition-colors ${autoRecord
-                ? 'bg-red-600 border-red-500 text-white'
-                : 'bg-transparent border-white/20 text-white/50 hover:text-white'
-                }`}
-            >
-              🎥 Auto-Record: {autoRecord ? 'ON' : 'OFF'}
-            </button>
-            <label className="col-span-2 flex items-center gap-2 px-2 py-1 bg-white/5 rounded cursor-pointer mt-1">
-              <input
-                type="checkbox"
-                onChange={(e) => {
-                  setVehicleVisibility(!e.target.checked);
-                }}
-                className="w-4 h-4 rounded border-white/20 bg-white/10 text-blue-500 focus:ring-offset-0 focus:ring-1 focus:ring-blue-500"
-              />
-              <span className="text-xs text-white/70">Hide Aircraft (Invisible Mode)</span>
-            </label>
-            {/* Terrain Avoidance Status */}
-            <div className="col-span-2 flex items-center gap-2 px-2 py-1 bg-green-900/30 rounded border border-green-500/30 mt-1">
-              <span className="text-green-400">🛡️</span>
-              <span className="text-xs text-green-300">Terrain Avoidance Active</span>
-            </div>
-          </div>
-
-          {/* Input Section */}
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={cityName}
-              onChange={(e) => setCityName(e.target.value)}
-              placeholder="Enter City Name..."
-              className="flex-1 bg-white/5 border border-white/10 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
-              onKeyDown={(e) => e.key === 'Enter' && searchCity()}
-            />
-            <button
-              onClick={searchCity}
-              disabled={isSearching}
-              className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 rounded text-sm font-medium transition-colors disabled:opacity-50"
-            >
-              {isSearching ? '...' : 'Add'}
-            </button>
-          </div>
-
-          {/* Flight Mode Selector */}
-          <div className="bg-white/5 p-2 rounded space-y-2">
-            <label className="text-xs text-white/50 uppercase tracking-wider block">Flight Mode</label>
-            <select
-              value={flightMode}
-              onChange={(e) => setFlightMode(e.target.value as FlightMode)}
-              className="w-full bg-black/40 border border-white/10 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
-            >
-              <option value="linear">➡️ Linear Flyover</option>
-              <option value="orbit">🔄 Orbit (360°)</option>
-              <option value="lock">🎯 Target Lock</option>
-            </select>
-
-            {/* Flight Parameters Sliders */}
-            <div className="space-y-4 pt-2 border-t border-white/10">
-              {/* Altitude Slider */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs text-white/70">
-                  <span>Flight Altitude</span>
-                  <div className="flex items-center gap-2">
-                    {sceneType && (
-                      <span className="text-[10px] text-future-accent bg-future-primary/20 px-1 rounded">
-                        {sceneType}
-                      </span>
-                    )}
-                    <span className={autoAltitudeMode ? 'text-green-400' : ''}>
-                      {flightAltitude}m
-                    </span>
-                  </div>
-                </div>
-                <input
-                  type="range"
-                  min="50"
-                  max="2000"
-                  step="50"
-                  value={flightAltitude}
-                  onChange={(e) => {
-                    setFlightAltitude(Number(e.target.value));
-                    setAutoAltitudeMode(false);
-                    setSceneType(null);
-                  }}
-                  className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer"
-                />
-                {/* Auto Altitude Button */}
-                <div className="flex gap-1 mt-1">
-                  <button
-                    onClick={() => {
-                      // Calculate auto altitude based on waypoints or current position
-                      if (waypoints.length > 0) {
-                        const autoAlt = calculateAutoAltitudeForPath(waypoints);
-                        if (autoAlt) {
-                          setFlightAltitude(autoAlt);
-                          setAutoAltitudeMode(true);
-                          // Get scene type from first waypoint
-                          const wp = waypoints[0];
-                          const result = calculateAutoAltitude(wp.lon, wp.lat);
-                          if (result) setSceneType(result.sceneType);
-                        }
-                      } else {
-                        // Use current camera position
-                        const pos = getCurrentCameraPosition();
-                        const result = calculateAutoAltitude(pos.longitude, pos.latitude);
-                        if (result) {
-                          setFlightAltitude(result.altitude);
-                          setAutoAltitudeMode(true);
-                          setSceneType(result.sceneType);
-                        }
-                      }
-                    }}
-                    className={`flex-1 text-[10px] py-1.5 px-2 rounded transition-colors flex items-center justify-center gap-1 ${autoAltitudeMode
-                        ? 'bg-green-500/30 text-green-300 border border-green-500/50'
-                        : 'bg-white/10 text-white/60 hover:bg-white/20 border border-transparent'
-                      }`}
-                    title="Automatically calculate best viewing altitude based on terrain"
-                  >
-                    ✨ Auto Best View
-                  </button>
-                </div>
-              </div>
-
-              {/* Speed Slider */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs text-white/70">
-                  <span>Flight Speed</span>
-                  <span className="text-future-accent">{flightSpeed}m/s</span>
-                </div>
-                <input
-                  type="range"
-                  min={MIN_SPEED}
-                  max={MAX_SPEED}
-                  step="5"
-                  value={flightSpeed}
-                  onChange={(e) => setFlightSpeed(Number(e.target.value))}
-                  className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer"
-                />
-                {/* Speed Presets */}
-                <div className="flex gap-1 mt-1">
-                  {SPEED_PRESETS.map((preset) => (
-                    <button
-                      key={preset.label}
-                      onClick={() => setFlightSpeed(preset.value)}
-                      className={`flex-1 text-[10px] py-1 px-1 rounded transition-colors ${flightSpeed === preset.value
-                        ? 'bg-future-primary text-white'
-                        : 'bg-white/10 text-white/60 hover:bg-white/20'
-                        }`}
-                      title={preset.description}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {flightMode === 'orbit' && (
-              <div className="space-y-1 pt-1 border-t border-white/10 mt-2">
-                <div className="flex justify-between text-xs text-white/70">
-                  <span>Radius</span>
-                  <span>{orbitRadius}m</span>
-                </div>
-                <input
-                  type="range"
-                  min="200"
-                  max="2000"
-                  step="50"
-                  value={orbitRadius}
-                  onChange={(e) => setOrbitRadius(Number(e.target.value))}
-                  className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer"
-                />
-              </div>
-            )}
-
-            {flightMode === 'lock' && (
-              <div className="text-xs text-amber-400">
-                * Path: Camera -&gt; Target
-              </div>
-            )}
-          </div>
-
-          {/* Waypoints List */}
-          <div className="max-h-40 overflow-y-auto space-y-2">
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider">
-              Waypoints ({waypoints.length})
-            </h3>
-
-            {waypoints.length === 0 ? (
-              <div className="text-xs text-white/30 text-center py-4">
-                No waypoints added yet.
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {waypoints.map((wp, idx) => (
-                  <div key={idx} className="flex items-center justify-between bg-white/5 p-2 rounded text-sm gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="truncate font-medium">{idx + 1}. {wp.name}</div>
-                      <div className="text-xs text-white/40 font-mono">
-                        {wp.lat.toFixed(2)}, {wp.lon.toFixed(2)}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Start Flight Button */}
-          <button
-            onClick={handleStartFlight}
-            disabled={isStartDisabled()}
-            className={`w-full py-3 rounded font-medium transition-colors flex items-center justify-center gap-2 ${isStartDisabled()
-              ? 'bg-gray-700 text-gray-400'
-              : 'bg-green-600 hover:bg-green-700 text-white'
-              }`}
+          <button 
+            onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+            className="w-full mt-2 flex items-center justify-center gap-1 text-[10px] text-white/40 hover:text-white/70 uppercase tracking-widest transition-colors py-1"
           >
-            {isRecording && <span className="animate-pulse w-2 h-2 rounded-full bg-red-400" />}
-            {isRecording ? 'Recording...' : `Start ${flightMode === 'linear' ? 'Linear Flight' : flightMode === 'orbit' ? 'Orbit' : 'Cinematic Lock'}`}
+            {isSettingsOpen ? 'Collapse Settings' : 'Expand Settings'}
+            <span className={cn("transition-transform duration-300", isSettingsOpen ? "rotate-180" : "")}>▼</span>
           </button>
+        </div>
 
-          {isRecording && (
+        {/* Scrollable Content */}
+        <div className={cn(
+          "overflow-y-auto transition-all duration-300 ease-in-out custom-scrollbar",
+          isSettingsOpen ? "max-h-[60vh] opacity-100 p-3 space-y-4" : "max-h-0 opacity-0 p-0 overflow-hidden"
+        )}>
+
+          <FlightSettings
+            isPortrait={isPortrait}
+            onTogglePortrait={handleTogglePortrait}
+            autoRecord={autoRecord}
+            onToggleAutoRecord={handleToggleAutoRecord}
+            vehicleVisibility={vehicleVisibility}
+            onToggleVehicleVisibility={handleToggleVehicleVisibility}
+          />
+
+          <WaypointSearch
+            onSearch={handleSearch}
+            isSearching={isSearching}
+          />
+
+          <FlightControls
+            flightMode={flightMode}
+            onModeChange={setFlightMode}
+            flightAltitude={flightAltitude}
+            onAltitudeChange={(val) => { setFlightAltitude(val); setAutoAltitudeMode(false); setSceneType(null); }}
+            flightSpeed={flightSpeed}
+            onSpeedChange={setFlightSpeed}
+            orbitRadius={orbitRadius}
+            onOrbitRadiusChange={setOrbitRadius}
+            autoAltitudeMode={autoAltitudeMode}
+            sceneType={sceneType}
+            onAutoAltitude={handleAutoAltitude}
+          />
+
+          <div className="space-y-2">
+            <h3 className="text-[10px] font-semibold text-white/40 uppercase tracking-wider flex justify-between items-center">
+              <span>Waypoints ({waypoints.length})</span>
+            </h3>
+            <WaypointList
+              waypoints={waypoints}
+              onRemove={handleRemoveWaypoint}
+              onClear={handleClearWaypoints}
+            />
+          </div>
+        </div>
+
+        {/* Footer Actions - Always Visible */}
+        <div className="p-3 bg-black/40 border-t border-white/10 backdrop-blur-xl mt-auto">
+          {isRecording ? (
             <button
               onClick={handleStopRecording}
-              className="w-full py-3 rounded font-medium transition-colors flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white animate-pulse"
+              className="w-full py-3 rounded font-medium transition-colors flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white animate-pulse shadow-lg shadow-red-900/40"
             >
-              ⏹ Stop Recording
+              <span className="w-2 h-2 bg-white rounded-full animate-ping" />
+              Stop Recording
+            </button>
+          ) : (
+            <button
+                onClick={handleStartFlight}
+                disabled={isStartDisabled}
+                className={cn(
+                  "w-full py-3 rounded font-medium transition-all flex items-center justify-center gap-2",
+                  isStartDisabled
+                    ? "bg-white/5 text-white/20 cursor-not-allowed border border-white/5"
+                    : "bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white shadow-lg shadow-green-900/30 border border-green-400/20"
+                )}
+            >
+                {`Start ${flightMode === 'linear' ? 'Linear Flight' : flightMode === 'orbit' ? 'Orbit' : 'Lock'}`}
             </button>
           )}
         </div>

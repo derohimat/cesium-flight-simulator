@@ -22,7 +22,14 @@ export function useCameraPosition() {
   });
 
   useEffect(() => {
+    let lastUpdate = 0;
+    const UPDATE_RATE = 250; // Throttle to 4fps for UI
+
     const handleCameraUpdate = (data: any) => {
+      const now = Date.now();
+      if (now - lastUpdate < UPDATE_RATE) return;
+
+      lastUpdate = now;
       setPosition({
         latitude: data.latitude.toFixed(5),
         longitude: data.longitude.toFixed(5),

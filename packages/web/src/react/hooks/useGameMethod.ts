@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useGameBridge } from './useGameBridge';
 import type { CameraType } from '../../cesium/managers/CameraManager';
 import type { VehicleStateData } from '../../cesium/bridge/types';
@@ -6,7 +7,7 @@ import type { QualityConfig } from '../../cesium/core/Scene';
 export function useGameMethod() {
   const bridge = useGameBridge();
 
-  return {
+  return useMemo(() => ({
     switchCamera: () => bridge.switchCamera(),
     getCameraType: (): CameraType => bridge.getCameraType(),
     toggleRoverMode: () => bridge.toggleRoverMode(),
@@ -43,7 +44,7 @@ export function useGameMethod() {
     calculateAutoAltitude: (lng: number, lat: number) => bridge.calculateAutoAltitude(lng, lat),
     calculateAutoAltitudeForPath: (waypoints: { lat: number; lon: number }[]) => bridge.calculateAutoAltitudeForPath(waypoints),
     getAltitudePresets: (lng: number, lat: number) => bridge.getAltitudePresets(lng, lat),
-  };
+  }), [bridge]);
 }
 
 

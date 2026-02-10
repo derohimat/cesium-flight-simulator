@@ -41,17 +41,18 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
   }
 
   private startUpdates(): void {
+    // High frequency updates for vehicle physics/speedometer (60fps)
     this.updateInterval = window.setInterval(() => {
       this.emitVehicleState();
     }, 16);
+
+    // Lower frequency updates for camera telemtry (10fps)
+    window.setInterval(() => {
+      this.emitCameraState();
+    }, 100);
   }
 
-
-
-  private emitVehicleState(): void {
-    const vehicle = this.game.getVehicleManager().getActiveVehicle();
-
-    // Emit Camera Position independently
+  private emitCameraState(): void {
     const camera = this.game.getScene().camera;
     const positionCartographic = Cesium.Cartographic.fromCartesian(camera.position);
     this.emit('cameraPositionChanged', {
@@ -62,6 +63,10 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
       pitch: Cesium.Math.toDegrees(camera.pitch),
       roll: Cesium.Math.toDegrees(camera.roll),
     });
+  }
+
+  private emitVehicleState(): void {
+    const vehicle = this.game.getVehicleManager().getActiveVehicle();
 
     if (vehicle && vehicle.isModelReady()) {
       const state = vehicle.getState();
