@@ -41,6 +41,7 @@ export const WaypointSearch = memo(function WaypointSearch({ onSearch, isSearchi
           type="text"
           value={cityName}
           onChange={(e) => setCityName(e.target.value)}
+          aria-label="Search for a waypoint location"
           placeholder="Add location (e.g. 'Paris')"
           className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-future-primary/50 focus:bg-white/10 transition-all"
           onKeyDown={(e) => e.key === 'Enter' && handleSearch()}

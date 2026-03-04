@@ -82,6 +82,7 @@ export function LocationSelector() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search locations"
               placeholder="Search locations..."
               className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-future-primary transition-colors"
               autoFocus
