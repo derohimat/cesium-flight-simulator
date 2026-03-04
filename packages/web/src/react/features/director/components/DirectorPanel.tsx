@@ -8,6 +8,7 @@ import { WaypointSearch } from './sections/WaypointSearch';
 import { FlightControls } from './sections/FlightControls';
 import { WaypointList } from './sections/WaypointList';
 import { cn } from '../../../shared/utils/cn';
+import { getTokens } from '../../../../utils/tokenValidator';
 
 export interface Waypoint {
   lat: number;
@@ -99,18 +100,48 @@ export function DirectorPanel() {
 
   const handleSearch = useCallback(async (city: string) => {
     setIsSearching(true);
+    const tokens = getTokens();
+    
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`
-      );
-      const data = await response.json();
+      let result;
+      
+      if (tokens.mapbox) {
+        // Use Mapbox Geocoding API
+        const response = await fetch(
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(city)}.json?access_token=${tokens.mapbox}&limit=1`
+        );
+        const data = await response.json();
+        
+        if (data.features && data.features.length > 0) {
+          const feature = data.features[0];
+          result = {
+            lat: feature.center[1],
+            lon: feature.center[0],
+            name: feature.text
+          };
+        }
+      } else {
+        // Fallback to Nominatim (OpenStreetMap)
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`
+        );
+        const data = await response.json();
 
-      if (data && data.length > 0) {
-        const result = data[0];
+        if (data && data.length > 0) {
+          const item = data[0];
+          result = {
+            lat: parseFloat(item.lat),
+            lon: parseFloat(item.lon),
+            name: item.display_name.split(',')[0]
+          };
+        }
+      }
+
+      if (result) {
         const newWaypoint: Waypoint = {
-          lat: parseFloat(result.lat),
-          lon: parseFloat(result.lon),
-          name: result.display_name.split(',')[0]
+          lat: result.lat,
+          lon: result.lon,
+          name: result.name
         };
         setWaypoints(prev => [...prev, newWaypoint]);
       }
