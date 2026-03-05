@@ -51,6 +51,7 @@ export function TokenSetup({ onComplete }: TokenSetupProps) {
             <input
               type="text"
               value={cesiumToken}
+              maxLength={1000}
               onChange={(e) => setCesiumToken(e.target.value)}
               placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg 
@@ -78,6 +79,7 @@ export function TokenSetup({ onComplete }: TokenSetupProps) {
             <input
               type="text"
               value={mapboxToken}
+              maxLength={1000}
               onChange={(e) => setMapboxToken(e.target.value)}
               placeholder="pk.eyJ1Ijo..."
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg 

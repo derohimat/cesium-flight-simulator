@@ -40,6 +40,7 @@ export const WaypointSearch = memo(function WaypointSearch({ onSearch, isSearchi
         <input
           type="text"
           value={cityName}
+          maxLength={200}
           onChange={(e) => setCityName(e.target.value)}
           aria-label="Search for a waypoint location"
           placeholder="Add location (e.g. 'Paris')"
