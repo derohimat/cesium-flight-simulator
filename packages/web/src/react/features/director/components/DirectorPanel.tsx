@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Panel } from '../../../shared/components/Panel';
 import { useGameMethod } from '../../../hooks/useGameMethod';
-import { useCameraPosition } from '../../../hooks/useCameraPosition';
+
 import { TelemetryHUD } from './sections/TelemetryHUD';
 import { FlightSettings } from './sections/FlightSettings';
 import { WaypointSearch } from './sections/WaypointSearch';
@@ -42,7 +42,6 @@ export function DirectorPanel() {
     calculateAutoAltitudeForPath
   } = useGameMethod();
 
-  const cameraPosition = useCameraPosition();
 
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -245,7 +244,7 @@ export function DirectorPanel() {
       <Panel title="🎬 Director Mode" className="p-0 overflow-hidden flex flex-col">
         {/* Sticky Header with Telemetry */}
         <div className="p-3 bg-black/40 border-b border-white/10 backdrop-blur-xl">
-          <TelemetryHUD cameraPosition={cameraPosition} />
+          <TelemetryHUD />
 
           <button 
             onClick={() => setIsSettingsOpen(!isSettingsOpen)}
