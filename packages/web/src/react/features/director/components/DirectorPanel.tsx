@@ -155,7 +155,16 @@ export function DirectorPanel() {
     setWaypoints(prev => prev.filter((_, i) => i !== index));
   }, []);
 
+
+  const handleGoToWaypoint = useCallback((index: number) => {
+    const wp = waypoints[index];
+    if (wp) {
+      teleportTo(wp.lon, wp.lat, flightAltitude);
+    }
+  }, [waypoints, teleportTo, flightAltitude]);
+
   const handleClearWaypoints = useCallback(() => {
+
     setWaypoints([]);
   }, []);
 
@@ -196,6 +205,11 @@ export function DirectorPanel() {
     }
 
     try {
+      // Auto-adjust altitude for safety before starting flight
+      if (!autoAltitudeMode) {
+        handleAutoAltitude();
+      }
+
       if (flightMode === 'linear') {
         const entryPoint = waypoints[0];
         teleportTo(entryPoint.lon, entryPoint.lat, flightAltitude);
@@ -296,6 +310,7 @@ export function DirectorPanel() {
             <WaypointList
               waypoints={waypoints}
               onRemove={handleRemoveWaypoint}
+              onGoTo={handleGoToWaypoint}
               onClear={handleClearWaypoints}
             />
           </div>

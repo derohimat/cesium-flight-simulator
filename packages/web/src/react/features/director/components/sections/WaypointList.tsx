@@ -4,10 +4,11 @@ import type { Waypoint } from '../DirectorPanel';
 interface WaypointListProps {
   waypoints: Waypoint[];
   onRemove: (index: number) => void;
+  onGoTo: (index: number) => void;
   onClear: () => void;
 }
 
-export const WaypointList = memo(function WaypointList({ waypoints, onRemove, onClear }: WaypointListProps) {
+export const WaypointList = memo(function WaypointList({ waypoints, onRemove, onClear, onGoTo }: WaypointListProps) {
   if (waypoints.length === 0) {
     return (
       <div className="text-xs text-white/30 text-center py-4 bg-white/5 rounded border border-white/5 border-dashed">
@@ -36,13 +37,22 @@ export const WaypointList = memo(function WaypointList({ waypoints, onRemove, on
               </div>
             </div>
             
-            <button
-              onClick={() => onRemove(idx)}
-              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 text-white/30 hover:text-red-400 rounded transition-all"
-              title="Remove waypoint"
-            >
-              ✕
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => onGoTo(idx)}
+                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-blue-500/20 text-white/30 hover:text-blue-400 rounded transition-all flex items-center justify-center w-6 h-6"
+                title="Go to waypoint"
+              >
+                📍
+              </button>
+              <button
+                onClick={() => onRemove(idx)}
+                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 text-white/30 hover:text-red-400 rounded transition-all flex items-center justify-center w-6 h-6"
+                title="Remove waypoint"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         ))}
       </div>
