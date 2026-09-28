@@ -1,6 +1,7 @@
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { getTokens } from '../../utils/tokenValidator';
+import { RenderLoop } from './RenderLoop';
 
 export interface QualityConfig {
   fxaaEnabled: boolean;
@@ -11,6 +12,8 @@ export interface QualityConfig {
   bloomEnabled: boolean;
   hdr: boolean;
   exposure: number;
+  msaaSamples: number;
+  resolutionScale: number;
 }
 
 export class Scene {
@@ -20,9 +23,14 @@ export class Scene {
   public clock: Cesium.Clock;
   public primitives: Cesium.PrimitiveCollection;
 
-  private rotationSpeed = Cesium.Math.toRadians(0.1);
+  /** Radians per second (was 0.1° per rendered frame, i.e. ~6°/s at 60 fps). */
+  private rotationSpeed = Cesium.Math.toRadians(6);
   private earthSpinListener: Cesium.Event.RemoveCallback | null = null;
   private tileset: Cesium.Cesium3DTileset | null = null;
+  private renderLoop: RenderLoop;
+  /** User/preset-chosen SSE; the performance governor scales it by `sseMultiplier`. */
+  private baseMaximumScreenSpaceError = 24;
+  private sseMultiplier = 1;
 
   constructor(containerId: string) {
     Cesium.Ion.defaultAccessToken = getTokens().cesium;
@@ -41,7 +49,9 @@ export class Scene {
       fullscreenButton: false,
       vrButton: false,
       infoBox: false,
-      selectionIndicator: false
+      selectionIndicator: false,
+      // Rendering is driven by RenderLoop, which adds vsync-locked frame pacing.
+      useDefaultRenderLoop: false,
     });
 
     this.scene = this.viewer.scene;
@@ -52,11 +62,15 @@ export class Scene {
     this.setupScene();
     this.setupPostProcessing();
     this.loadTerrain();
+
+    this.renderLoop = new RenderLoop(this.viewer.cesiumWidget);
+    this.renderLoop.start();
   }
 
   private setupScene(): void {
     this.viewer.scene.globe.show = false;
-    this.scene.debugShowFramesPerSecond = true;
+    // Frame stats are shown by the React perf overlay (fed by PerformanceGovernor).
+    this.scene.debugShowFramesPerSecond = false;
 
     // Disable default camera controller (we use custom cameras in play mode)
     this.viewer.scene.screenSpaceCameraController.enableRotate = false;
@@ -109,7 +123,8 @@ export class Scene {
         }
       );
       this.primitives.add(this.tileset);
-      
+      this.applyScreenSpaceError();
+
       this.setVehicleQualityMode('aircraft');
     } catch (error) {
       console.log('Terrain loading failed:', error);
@@ -122,21 +137,24 @@ export class Scene {
 
   public setVehicleQualityMode(vehicleType: 'aircraft' | 'car'): void {
     if (!this.tileset) return;
-    
-    this.tileset.maximumScreenSpaceError = 24;
+
+    this.baseMaximumScreenSpaceError = 24;
+    this.applyScreenSpaceError();
     console.log(`${vehicleType === 'car' ? '🚗' : '✈️'} Switched to ${vehicleType} mode - SSE: 24`);
   }
 
   public getQualityConfig(): QualityConfig {
     return {
       fxaaEnabled: this.viewer.scene.postProcessStages.fxaa.enabled,
-      maximumScreenSpaceError: this.tileset?.maximumScreenSpaceError ?? 24,
+      maximumScreenSpaceError: this.baseMaximumScreenSpaceError,
       dynamicScreenSpaceError: this.tileset?.dynamicScreenSpaceError ?? true,
       dynamicScreenSpaceErrorFactor: this.tileset?.dynamicScreenSpaceErrorFactor ?? 24.0,
       skipLevelOfDetail: this.tileset?.skipLevelOfDetail ?? true,
       bloomEnabled: this.viewer.scene.postProcessStages.bloom.enabled,
       hdr: this.scene.highDynamicRange,
       exposure: this.viewer.scene.postProcessStages.exposure,
+      msaaSamples: this.getMsaaSamples(),
+      resolutionScale: this.getResolutionScale(),
     };
   }
 
@@ -145,10 +163,12 @@ export class Scene {
       this.viewer.scene.postProcessStages.fxaa.enabled = config.fxaaEnabled;
     }
 
+    if (config.maximumScreenSpaceError !== undefined) {
+      this.baseMaximumScreenSpaceError = config.maximumScreenSpaceError;
+      this.applyScreenSpaceError();
+    }
+
     if (this.tileset) {
-      if (config.maximumScreenSpaceError !== undefined) {
-        this.tileset.maximumScreenSpaceError = config.maximumScreenSpaceError;
-      }
       if (config.dynamicScreenSpaceError !== undefined) {
         this.tileset.dynamicScreenSpaceError = config.dynamicScreenSpaceError;
       }
@@ -169,6 +189,65 @@ export class Scene {
     if (config.exposure !== undefined) {
       this.viewer.scene.postProcessStages.exposure = config.exposure;
     }
+    if (config.msaaSamples !== undefined) {
+      this.setMsaaSamples(config.msaaSamples);
+    }
+    if (config.resolutionScale !== undefined) {
+      this.setResolutionScale(config.resolutionScale);
+    }
+  }
+
+  // --- Runtime performance knobs (driven by PerformanceGovernor) --------------------------
+
+  private applyScreenSpaceError(): void {
+    if (this.tileset) {
+      this.tileset.maximumScreenSpaceError = this.baseMaximumScreenSpaceError * this.sseMultiplier;
+    }
+  }
+
+  public setSseMultiplier(multiplier: number): void {
+    if (multiplier === this.sseMultiplier) return;
+    this.sseMultiplier = multiplier;
+    this.applyScreenSpaceError();
+  }
+
+  public setMsaaSamples(samples: number): void {
+    // Cesium clamps to the context's limit; guard so no-op writes don't realloc framebuffers.
+    if (this.scene.msaaSamples !== samples) {
+      this.scene.msaaSamples = samples;
+    }
+  }
+
+  public getMsaaSamples(): number {
+    return this.scene.msaaSamples;
+  }
+
+  public setResolutionScale(scale: number): void {
+    if (this.viewer.resolutionScale !== scale) {
+      this.viewer.resolutionScale = scale;
+    }
+  }
+
+  public getResolutionScale(): number {
+    return this.viewer.resolutionScale;
+  }
+
+  /** Render every n-th display refresh (2 on a 120 Hz panel = locked 60 fps). */
+  public setFrameDivisor(divisor: number): void {
+    this.renderLoop.setDivisor(divisor);
+  }
+
+  public getRefreshHz(): number {
+    return this.renderLoop.refreshHz;
+  }
+
+  /**
+   * HUD panels use `backdrop-filter: blur()` over the WebGL canvas; since the canvas changes
+   * every frame, the compositor re-blurs each panel every frame. Lite mode swaps in flat
+   * translucency when the GPU is the bottleneck.
+   */
+  public setLiteEffects(enabled: boolean): void {
+    document.documentElement.classList.toggle('perf-lite', enabled);
   }
 
   // Earth spinning functionality for startup sequence
@@ -177,8 +256,12 @@ export class Scene {
       return; // Already spinning
     }
 
+    let last = performance.now();
     this.earthSpinListener = this.scene.postRender.addEventListener(() => {
-      this.camera.rotateRight(this.rotationSpeed);
+      const now = performance.now();
+      const dt = Math.min((now - last) / 1000, 0.1);
+      last = now;
+      this.camera.rotateRight(this.rotationSpeed * dt);
     });
 
     console.log('🌍 Earth spinning started - exploring the world...');

@@ -1,6 +1,4 @@
-import { useState, useEffect } from 'react';
 import { useGameEvent } from '../../../hooks/useGameEvent';
-import * as Cesium from 'cesium';
 
 export interface VehiclePosition {
   longitude: number;
@@ -9,28 +7,27 @@ export interface VehiclePosition {
   heading: number;
 }
 
-export function useVehiclePosition() {
-  const vehicleState = useGameEvent('vehicleStateChanged');
-  const [position, setPosition] = useState<VehiclePosition>({
-    longitude: 11.9746,
-    latitude: 57.7089,
-    altitude: 200,
-    heading: 0,
-  });
+const DEFAULT_POSITION: VehiclePosition = {
+  longitude: 11.9746,
+  latitude: 57.7089,
+  altitude: 200,
+  heading: 0,
+};
 
-  useEffect(() => {
-    if (vehicleState?.position) {
-      const cartographic = Cesium.Cartographic.fromCartesian(vehicleState.position);
-      
-      setPosition({
-        longitude: Cesium.Math.toDegrees(cartographic.longitude),
-        latitude: Cesium.Math.toDegrees(cartographic.latitude),
-        altitude: cartographic.height,
-        heading: Cesium.Math.toDegrees(vehicleState.heading),
-      });
-    }
-  }, [vehicleState]);
+/**
+ * 10 Hz is plenty for a minimap. Every update re-renders a second WebGL context (Mapbox)
+ * that competes with Cesium for the GPU, and it used to run at the full 60 Hz event rate.
+ */
+const MINIMAP_UPDATE_MS = 100;
 
-  return position;
+export function useVehiclePosition(): VehiclePosition {
+  const vehicleState = useGameEvent('vehicleStateChanged', { throttle: MINIMAP_UPDATE_MS });
+
+  if (!vehicleState) return DEFAULT_POSITION;
+  return {
+    longitude: vehicleState.longitude,
+    latitude: vehicleState.latitude,
+    altitude: vehicleState.altitude,
+    heading: (vehicleState.heading * 180) / Math.PI,
+  };
 }
-

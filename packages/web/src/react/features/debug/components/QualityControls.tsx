@@ -91,12 +91,25 @@ function Toggle({ label, value, onChange, description }: ToggleProps) {
 
 interface QualityControlsProps {
   config: QualityConfig;
+  adaptive: boolean;
+  onAdaptiveChange: (enabled: boolean) => void;
   onUpdateSetting: <K extends keyof QualityConfig>(key: K, value: QualityConfig[K]) => void;
 }
 
-export function QualityControls({ config, onUpdateSetting }: QualityControlsProps) {
+const MSAA_OPTIONS = [1, 2, 4, 8];
+
+export function QualityControls({ config, adaptive, onAdaptiveChange, onUpdateSetting }: QualityControlsProps) {
   return (
     <div className="space-y-1">
+      <div className="pb-3">
+        <Toggle
+          label="Adaptive quality"
+          value={adaptive}
+          onChange={onAdaptiveChange}
+          description="Trades MSAA, resolution and tile detail for a steady frame rate; locks to half refresh on 120 Hz+ displays when needed"
+        />
+      </div>
+
       <CollapsibleSection title="Antialiasing" config={config} onUpdateSetting={onUpdateSetting}>
         <Toggle
           label="FXAA"
@@ -104,8 +117,38 @@ export function QualityControls({ config, onUpdateSetting }: QualityControlsProp
           onChange={(v) => onUpdateSetting('fxaaEnabled', v)}
           description="Post-process edge smoothing"
         />
-        <div className="text-[10px] text-white/60 bg-yellow-400/5 p-2 rounded">
-          💡 MSAA (4x) is always enabled. Restart required to change.
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-white/80">MSAA</span>
+            {adaptive && <span className="text-[10px] text-white/40">auto</span>}
+          </div>
+          <div className="grid grid-cols-4 gap-1">
+            {MSAA_OPTIONS.map((samples) => (
+              <button
+                key={samples}
+                onClick={() => onUpdateSetting('msaaSamples', samples)}
+                className={`py-1 rounded text-[11px] font-mono transition-colors ${
+                  config.msaaSamples === samples
+                    ? 'bg-blue-500/70 text-white'
+                    : 'bg-white/5 text-white/60 hover:bg-white/10'
+                }`}
+              >
+                {samples === 1 ? 'Off' : `${samples}×`}
+              </button>
+            ))}
+          </div>
+        </div>
+        <Slider
+          label="Resolution"
+          value={config.resolutionScale * 100}
+          min={50}
+          max={100}
+          step={5}
+          onChange={(v) => onUpdateSetting('resolutionScale', v / 100)}
+          suffix="%"
+        />
+        <div className="text-[10px] text-white/50">
+          Changing MSAA or resolution switches adaptive quality off.
         </div>
       </CollapsibleSection>
 

@@ -133,7 +133,8 @@ export function MiniMap() {
 
       {isVisible && (
         <div className={`fixed bottom-8 right-8 z-50 ${size} transition-all duration-300`}>
-          <div className="relative w-full h-full glass-panel overflow-hidden rounded-lg shadow-2xl">
+          {/* No backdrop blur here: the map covers the whole panel, so it would be pure cost. */}
+          <div className="relative w-full h-full glass-panel backdrop-blur-none overflow-hidden rounded-lg shadow-2xl">
             {/* Header */}
             <div className="absolute top-0 left-0 right-0 z-20 bg-black/50 backdrop-blur-md border-b border-white/10">
               <div className="relative flex items-center justify-between h-10 px-2">
@@ -260,6 +261,10 @@ export function MiniMap() {
               style={{ width: '100%', height: '100%' }}
               mapStyle="mapbox://styles/mapbox/dark-v11"
               attributionControl={false}
+              // Minimap: skip symbol fade-in animations (each one keeps Mapbox repainting) and
+              // wrapped world copies.
+              fadeDuration={0}
+              renderWorldCopies={false}
               dragPan={isExpanded}
               scrollZoom={isExpanded}
               doubleClickZoom={false}

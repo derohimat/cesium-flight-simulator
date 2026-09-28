@@ -1,6 +1,6 @@
 import * as Cesium from 'cesium';
 import { TypedEventEmitter } from './TypedEventEmitter';
-import type { GameEvents, VehicleStateData, GameMode } from './types';
+import type { GameEvents, VehicleStateData, GameMode, PerformanceStatsData } from './types';
 import type { CesiumVehicleGame } from '../bootstrap/main';
 import type { CameraType } from '../managers/CameraManager';
 import type { QualityConfig } from '../core/Scene';
@@ -8,18 +8,30 @@ import { Car } from '../vehicles/car/Car';
 import { Aircraft } from '../vehicles/aircraft/Aircraft';
 import type { Vehicle } from '../vehicles/Vehicle';
 import { ModeManager } from '../modes/ModeManager';
+import type { FrameHook } from '../core/GameLoop';
+
+/** UI refresh rates. Faster only burns main-thread time the renderer needs. */
+const VEHICLE_STATE_INTERVAL_MS = 1000 / 30;
+const PERFORMANCE_STATS_INTERVAL_MS = 250;
 
 export class GameBridge extends TypedEventEmitter<GameEvents> {
   private game: CesiumVehicleGame;
-  private updateInterval: number | null = null;
   private currentMode: GameMode = 'play';
   private modeManager: ModeManager;
+  private frameHook: FrameHook;
+  private lastVehicleEmit = 0;
+  private lastStatsEmit = 0;
+  private lastCrashed = false;
+  private static readonly scratchCartographic = new Cesium.Cartographic();
 
   constructor(game: CesiumVehicleGame) {
     super();
     this.game = game;
     this.modeManager = new ModeManager(game);
-    this.startUpdates();
+    // Emit from the render loop, right after the frame is submitted: the UI sees exactly what
+    // was drawn, and a timer can't wake up in the middle of a frame.
+    this.frameHook = { onFrameEnd: (_start, end) => this.onFrameEnd(end) };
+    this.game.getGameLoop().addFrameHook(this.frameHook);
     this.setupVehicleChangeListener();
     this.setupBuilderModeListener();
     this.applyQualityPreset('performance');
@@ -40,30 +52,67 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
     });
   }
 
-  private startUpdates(): void {
-    this.updateInterval = window.setInterval(() => {
+  private onFrameEnd(now: number): void {
+    if (now - this.lastVehicleEmit >= VEHICLE_STATE_INTERVAL_MS) {
+      this.lastVehicleEmit = now;
       this.emitVehicleState();
-    }, 16);
+    }
+    if (now - this.lastStatsEmit >= PERFORMANCE_STATS_INTERVAL_MS && this.listenerCount('performanceStats') > 0) {
+      this.lastStatsEmit = now;
+      this.emit('performanceStats', this.getPerformanceStats());
+    }
   }
 
   private emitVehicleState(): void {
     const vehicle = this.game.getVehicleManager().getActiveVehicle();
     if (vehicle && vehicle.isModelReady()) {
-      const state = vehicle.getState();
-      this.emit('vehicleStateChanged', {
-        speed: state.speed,
-        velocity: state.velocity,
-        position: state.position,
-        heading: state.heading,
-        pitch: state.pitch,
-        roll: state.roll,
-      });
+      this.emit('vehicleStateChanged', this.toVehicleStateData(vehicle));
 
-      // Check for crash
-      if (vehicle instanceof Aircraft && vehicle.isCrashed()) {
+      // Only on transitions; re-sending while crashed re-rendered the crash screen every tick.
+      const crashed = vehicle instanceof Aircraft && vehicle.isCrashed();
+      if (crashed && !this.lastCrashed) {
         this.emit('crashed', { crashed: true });
       }
+      this.lastCrashed = crashed;
     }
+  }
+
+  private toVehicleStateData(vehicle: Vehicle): VehicleStateData {
+    const state = vehicle.getState();
+    const carto = Cesium.Cartographic.fromCartesian(
+      state.position,
+      Cesium.Ellipsoid.WGS84,
+      GameBridge.scratchCartographic
+    );
+    return {
+      speed: state.speed,
+      velocity: state.velocity,
+      position: Cesium.Cartesian3.clone(state.position),
+      heading: state.heading,
+      pitch: state.pitch,
+      roll: state.roll,
+      longitude: carto ? Cesium.Math.toDegrees(carto.longitude) : 0,
+      latitude: carto ? Cesium.Math.toDegrees(carto.latitude) : 0,
+      altitude: carto ? carto.height : 0,
+    };
+  }
+
+  public getPerformanceStats(): PerformanceStatsData {
+    return {
+      ...this.game.getPerformanceGovernor().snapshot(),
+      groundQueriesPerSecond: this.game.getGroundSampler().queriesPerSecond,
+      physicsStepsLastFrame: this.game.getGameLoop().lastStepCount,
+    };
+  }
+
+  /** Live ring buffers (ms) for the frame-time graph; `cursor` is the next write index. */
+  public getFrameHistory(): { intervals: Float32Array; cpu: Float32Array; cursor: number } {
+    const governor = this.game.getPerformanceGovernor();
+    return { intervals: governor.frameIntervals, cpu: governor.cpuTimes, cursor: governor.frameCursor };
+  }
+
+  public setAdaptiveQuality(enabled: boolean): void {
+    this.game.getPerformanceGovernor().setAdaptive(enabled);
   }
 
   public emitVehicleChangeEvents(vehicle: Vehicle): void {
@@ -138,15 +187,7 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
   public getVehicleState(): VehicleStateData | null {
     const vehicle = this.game.getVehicleManager().getActiveVehicle();
     if (vehicle && vehicle.isModelReady()) {
-      const state = vehicle.getState();
-      return {
-        speed: state.speed,
-        velocity: state.velocity,
-        position: state.position,
-        heading: state.heading,
-        pitch: state.pitch,
-        roll: state.roll,
-      };
+      return this.toVehicleStateData(vehicle);
     }
     return null;
   }
@@ -194,10 +235,7 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
   }
 
   public destroy(): void {
-    if (this.updateInterval !== null) {
-      clearInterval(this.updateInterval);
-      this.updateInterval = null;
-    }
+    this.game.getGameLoop().removeFrameHook(this.frameHook);
     this.removeAllListeners();
   }
 
@@ -206,6 +244,10 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
   }
 
   public updateQualitySettings(config: Partial<QualityConfig>): void {
+    // MSAA and resolution are the governor's knobs; touching them by hand means manual mode.
+    if (config.msaaSamples !== undefined || config.resolutionScale !== undefined) {
+      this.setAdaptiveQuality(false);
+    }
     this.game.getScene().updateQualityConfig(config);
   }
 
