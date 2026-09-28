@@ -1,5 +1,5 @@
 import * as Cesium from 'cesium';
-import { Camera } from './Camera';
+import { Camera, damp } from './Camera';
 import { lerpAngle } from '../vehicles/Vehicle';
 
 export interface ChaseCameraTuning {
@@ -22,11 +22,6 @@ export interface ChaseCameraTuning {
   /** Curve exponent from speed to FOV (2 = quadratic, 3 = cubic). */
   fovCurve: number;
   fovRate: number;
-}
-
-/** Per-frame lerp factor tuned at 60 fps → equivalent factor for an arbitrary frame time. */
-function damp(factorAt60: number, deltaTime: number): number {
-  return 1 - Math.pow(1 - factorAt60, deltaTime * 60);
 }
 
 /**

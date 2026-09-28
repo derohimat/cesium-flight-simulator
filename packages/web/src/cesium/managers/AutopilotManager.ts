@@ -19,9 +19,19 @@ export class AutopilotManager {
      * Initialize terrain avoidance system (call after viewer is ready)
      */
     public initTerrainAvoidance(): void {
-        const viewer = this.game.getScene().viewer;
-        this.terrainAvoidance = new TerrainAvoidanceSystem(viewer);
+        this.terrainAvoidance = new TerrainAvoidanceSystem();
         console.log('🛡️ Terrain Avoidance System initialized');
+    }
+
+    /** The vehicle cameras re-aim every frame; take the view while the autopilot flies it. */
+    private takeCamera(): void {
+        this.game.getCameraManager().suspend();
+    }
+
+    private releaseCameraIfIdle(): void {
+        if (!this.isActive()) {
+            this.game.getCameraManager().resume();
+        }
     }
 
     /**
@@ -44,14 +54,16 @@ export class AutopilotManager {
 
         this.isFlying = true;
         this.game.getInputManager().setInputLocked(true);
+        this.takeCamera();
 
         const viewer = this.game.getScene().viewer;
         const camera = viewer.camera;
 
         // Apply speed limits for content creation
         let speed = options.speed || TerrainAvoidanceSystem.DEFAULT_SPEED;
-        if (this.contentCreationMode && this.terrainAvoidance) {
-            speed = this.terrainAvoidance.clampSpeed(speed);
+        const terrain = this.contentCreationMode ? this.terrainAvoidance : null;
+        if (terrain) {
+            speed = terrain.clampSpeed(speed);
         }
 
         const baseAltitude = options.altitude || 200;
@@ -59,53 +71,48 @@ export class AutopilotManager {
         console.log(`✈️ Starting Autopilot Flight (Speed: ${speed}m/s, Base Alt: ${baseAltitude}m)...`);
 
         try {
-            // Adjust path for terrain avoidance if enabled
-            let adjustedWaypoints: { lat: number; lon: number; altitude: number }[];
+            const start = Cesium.Cartographic.fromCartesian(camera.positionWC);
+            const startLon = Cesium.Math.toDegrees(start.longitude);
+            const startLat = Cesium.Math.toDegrees(start.latitude);
 
-            if (this.contentCreationMode && this.terrainAvoidance) {
-                adjustedWaypoints = this.terrainAvoidance.adjustPathForTerrainAvoidance(
-                    waypoints,
-                    baseAltitude
-                );
-                console.log('🛡️ Path adjusted for terrain avoidance');
-            } else {
-                // Simple path without avoidance
-                adjustedWaypoints = waypoints.map(wp => {
-                    const terrainHeight = viewer.scene.globe.getHeight(
-                        Cesium.Cartographic.fromDegrees(wp.lon, wp.lat)
-                    ) || 0;
+            // Plan every leg up front against real terrain (one batched height request), so
+            // the flight never pauses between legs to wait for heights.
+            const legs = terrain
+                ? await terrain.withHeights(() =>
+                    terrain.adjustPathForTerrainAvoidance(waypoints, baseAltitude).map((point, i, path) => {
+                        const from = i === 0 ? { lon: startLon, lat: startLat, altitude: start.height } : path[i - 1];
+                        const heading = bearingDegrees(from.lat, from.lon, point.lat, point.lon);
+                        return {
+                            ...point,
+                            altitude: terrain.calculateSafeAltitude(point.lon, point.lat, point.altitude),
+                            heading,
+                            // Terrain along this leg can only slow the flight down. It used to
+                            // replace the requested speed outright (a 150 m/s request flew at
+                            // 60), and was sampled at the camera along the camera's heading,
+                            // which never changes during a flight.
+                            speed: Math.min(speed, terrain.calculateDynamicSpeed(from.lon, from.lat, heading, from.altitude)),
+                        };
+                    }))
+                : waypoints.map((wp, i, path) => {
+                    const from = i === 0 ? { lon: startLon, lat: startLat } : path[i - 1];
                     return {
-                        lat: wp.lat,
-                        lon: wp.lon,
-                        altitude: terrainHeight + baseAltitude
+                        ...wp,
+                        altitude: baseAltitude,
+                        heading: bearingDegrees(from.lat, from.lon, wp.lat, wp.lon),
+                        speed,
                     };
                 });
-            }
+            if (terrain) console.log('🛡️ Path adjusted for terrain avoidance');
 
-            for (const point of adjustedWaypoints) {
-                // Dynamic speed adjustment based on terrain ahead
-                let pointSpeed = speed;
-                if (this.contentCreationMode && this.terrainAvoidance) {
-                    const cameraCart = Cesium.Cartographic.fromCartesian(camera.position);
-                    pointSpeed = this.terrainAvoidance.calculateDynamicSpeed(
-                        Cesium.Math.toDegrees(cameraCart.longitude),
-                        Cesium.Math.toDegrees(cameraCart.latitude),
-                        Cesium.Math.toDegrees(camera.heading),
-                        cameraCart.height
-                    );
-                }
-
-                const destination = Cesium.Cartesian3.fromDegrees(
-                    point.lon,
-                    point.lat,
-                    point.altitude
-                );
-
-                await this.flyToPointWithAvoidance(camera, destination, pointSpeed, viewer);
+            for (const leg of legs) {
+                if (!this.isFlying) break; // cancelled
+                const destination = Cesium.Cartesian3.fromDegrees(leg.lon, leg.lat, leg.altitude);
+                await this.flyToPointWithAvoidance(camera, destination, leg.speed, Cesium.Math.toRadians(leg.heading));
             }
         } finally {
             this.isFlying = false;
             this.game.getInputManager().setInputLocked(false);
+            this.releaseCameraIfIdle();
             console.log('✅ Autopilot Flight Complete');
         }
     }
@@ -114,37 +121,18 @@ export class AutopilotManager {
         camera: Cesium.Camera,
         destination: Cesium.Cartesian3,
         speed: number,
-        _viewer?: Cesium.Viewer // Optional, kept for API compatibility
+        heading: number
     ): Promise<void> {
         return new Promise((resolve) => {
-            const currentPos = camera.position;
-            const distance = Cesium.Cartesian3.distance(currentPos, destination);
+            const distance = Cesium.Cartesian3.distance(camera.positionWC, destination);
             const duration = Math.max(3, distance / speed);
-
-            // Check if destination is safe
-            if (this.contentCreationMode && this.terrainAvoidance) {
-                const destCart = Cesium.Cartographic.fromCartesian(destination);
-                const safeAlt = this.terrainAvoidance.calculateSafeAltitude(
-                    Cesium.Math.toDegrees(destCart.longitude),
-                    Cesium.Math.toDegrees(destCart.latitude),
-                    destCart.height
-                );
-
-                if (safeAlt > destCart.height) {
-                    // Adjust destination altitude for safety
-                    destination = Cesium.Cartesian3.fromDegrees(
-                        Cesium.Math.toDegrees(destCart.longitude),
-                        Cesium.Math.toDegrees(destCart.latitude),
-                        safeAlt
-                    );
-                    console.log(`⚠️ Altitude adjusted to ${safeAlt.toFixed(0)}m for safety`);
-                }
-            }
 
             camera.flyTo({
                 destination: destination,
                 orientation: {
-                    heading: camera.heading,
+                    // Face along the leg (it used to keep the starting heading, so the
+                    // camera slid sideways or backwards along most paths).
+                    heading,
                     pitch: Cesium.Math.toRadians(-20),
                     roll: 0.0,
                 },
@@ -159,11 +147,6 @@ export class AutopilotManager {
         });
     }
 
-    // Legacy method for backward compatibility
-    private _flyToPoint(camera: Cesium.Camera, destination: Cesium.Cartesian3, speed: number): Promise<void> {
-        return this.flyToPointWithAvoidance(camera, destination, speed);
-    }
-
     private orbitListener: Cesium.Event.RemoveCallback | undefined;
     private isOrbiting: boolean = false;
 
@@ -173,6 +156,7 @@ export class AutopilotManager {
 
         this.isOrbiting = true;
         this.game.getInputManager().setInputLocked(true);
+        this.takeCamera();
 
         const viewer = this.game.getScene().viewer;
         const camera = viewer.camera;
@@ -184,21 +168,29 @@ export class AutopilotManager {
         const pitch = Cesium.Math.toRadians(-30);
         const range = radius;
 
+        const offset = new Cesium.HeadingPitchRange(currentHeading, pitch, range);
+
         // Apply initial transform
-        camera.lookAtTransform(transform, new Cesium.HeadingPitchRange(currentHeading, pitch, range));
+        camera.lookAtTransform(transform, offset);
 
         let totalRotation = 0;
+        let lastTick = performance.now();
 
         // Subscribe to tick
         this.orbitListener = viewer.clock.onTick.addEventListener(() => {
             if (!this.isOrbiting) return;
 
-            const rotationStep = speed; // degrees per tick
-            // Increment heading based on speed 
+            // `speed` is degrees per 1/60 s. It used to be applied per tick, so orbits ran 2.4×
+            // faster on a 144 Hz display than at 60 Hz (and at half speed when frame-paced).
+            const now = performance.now();
+            const dt = Math.min((now - lastTick) / 1000, 0.25); // same jump guard as GameLoop
+            lastTick = now;
+            const rotationStep = speed * dt * 60;
             currentHeading += Cesium.Math.toRadians(rotationStep);
             totalRotation += Math.abs(rotationStep);
 
-            camera.lookAtTransform(transform, new Cesium.HeadingPitchRange(currentHeading, pitch, range));
+            offset.heading = currentHeading;
+            camera.lookAtTransform(transform, offset);
 
             if (totalRotation >= 360) {
                 this.stopOrbit();
@@ -222,6 +214,7 @@ export class AutopilotManager {
             // Release camera from local frame
             const viewer = this.game.getScene().viewer;
             viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+            this.releaseCameraIfIdle();
 
             console.log('⏹️ Stopped Drone Orbit');
         }
@@ -237,6 +230,7 @@ export class AutopilotManager {
 
         this.isLocked = true;
         this.game.getInputManager().setInputLocked(true);
+        this.takeCamera();
         console.log('🎯 Starting Target Lock Flight');
 
         const viewer = this.game.getScene().viewer;
@@ -322,6 +316,7 @@ export class AutopilotManager {
         if (this.isLocked) {
             this.isLocked = false;
             this.game.getInputManager().setInputLocked(false);
+            this.releaseCameraIfIdle();
             console.log('⏹️ Stopped Target Lock Flight');
         }
     }
@@ -330,12 +325,16 @@ export class AutopilotManager {
         const viewer = this.game.getScene().viewer;
         this.hideGuideLine(); // Clear existing
 
+        // `target` is in radians; it used to go through fromDegrees, which drew the line to a
+        // point near 0°N 0°E instead of the target.
+        const targetPos = Cesium.Cartographic.toCartesian(target);
+        const positions = [new Cesium.Cartesian3(), targetPos];
         this.guideLineEntity = viewer.entities.add({
             polyline: {
                 positions: new Cesium.CallbackProperty(() => {
-                    const cameraPos = viewer.camera.position;
-                    const targetPos = Cesium.Cartesian3.fromDegrees(target.longitude, target.latitude, target.height);
-                    return [cameraPos, targetPos];
+                    // World position: `camera.position` is relative to the chase camera's frame.
+                    Cesium.Cartesian3.clone(viewer.camera.positionWC, positions[0]);
+                    return positions;
                 }, false),
                 width: 2,
                 material: Cesium.Color.YELLOW.withAlpha(0.6),
@@ -357,4 +356,14 @@ export class AutopilotManager {
     public isActive(): boolean {
         return this.isFlying || this.isOrbiting || this.isLocked;
     }
+}
+
+/** Initial great-circle bearing from point 1 to point 2, degrees clockwise from north. */
+function bearingDegrees(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const dLon = Cesium.Math.toRadians(lon2 - lon1);
+    const lat1Rad = Cesium.Math.toRadians(lat1);
+    const lat2Rad = Cesium.Math.toRadians(lat2);
+    const y = Math.sin(dLon) * Math.cos(lat2Rad);
+    const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
+    return Cesium.Math.toDegrees(Math.atan2(y, x));
 }

@@ -93,6 +93,7 @@ export class PerformanceGovernor implements FrameHook {
   private unpaceBackoff = MIN_BACKOFF_MS;
 
   private adaptive = true;
+  private held = false;
   private refreshHz = 60;
 
   constructor(private scene: Scene) {}
@@ -142,7 +143,7 @@ export class PerformanceGovernor implements FrameHook {
   private evaluateWindow(now: number): void {
     this.refreshHz = this.scene.getRefreshHz();
 
-    if (!this.adaptive || document.hidden) return;
+    if (!this.adaptive || this.held || document.hidden) return;
     if (now - this.startedAt < WARMUP_MS || now < this.settleUntil) return;
     if (this.windowFrames < 10) return;
 
@@ -246,6 +247,16 @@ export class PerformanceGovernor implements FrameHook {
     this.applyTier();
     this.setPaced(false, performance.now());
     this.settleUntil = performance.now() + SETTLE_MS;
+  }
+
+  /**
+   * Freeze the current tier and pacing (e.g. while recording: a resolution change resizes the
+   * canvas mid-stream). Measurement continues; decisions resume from fresh windows.
+   */
+  public setHold(held: boolean): void {
+    this.held = held;
+    this.badWindows = 0;
+    this.goodWindows = 0;
   }
 
   public isAdaptive(): boolean {

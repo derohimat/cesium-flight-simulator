@@ -25,6 +25,7 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
   private lastCameraEmit = 0;
   private lastCrashed = false;
   private static readonly scratchCartographic = new Cesium.Cartographic();
+  private static readonly scratchCameraCartographic = new Cesium.Cartographic();
 
   constructor(game: CesiumVehicleGame) {
     super();
@@ -201,7 +202,9 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
 
   public getCurrentCameraPosition(): CameraPositionData {
     const camera = this.game.getScene().camera;
-    const positionCartographic = Cesium.Cartographic.fromCartesian(camera.position);
+    // positionWC, not position: chase cameras use lookAt, which makes `position` an offset in
+    // the vehicle's local frame (it read as ~6,000 km below the surface).
+    const positionCartographic = Cesium.Cartographic.fromCartesian(camera.positionWC, Cesium.Ellipsoid.WGS84, GameBridge.scratchCameraCartographic);
     return {
       latitude: Cesium.Math.toDegrees(positionCartographic.latitude),
       longitude: Cesium.Math.toDegrees(positionCartographic.longitude),
@@ -356,10 +359,13 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
   }
 
   public startRecording(): void {
+    // A resolution change resizes the canvas that captureStream records; hold quality steady.
+    this.game.getPerformanceGovernor().setHold(true);
     this.game.getRecordingManager().startRecording();
   }
 
   public stopRecording(fileName?: string): void {
+    this.game.getPerformanceGovernor().setHold(false);
     this.game.getRecordingManager().stopRecording(fileName);
   }
 
@@ -417,11 +423,11 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
   /**
    * Calculate optimal altitude for best view at a location
    */
-  public calculateAutoAltitude(lng: number, lat: number): { altitude: number; sceneType: string } | null {
+  public async calculateAutoAltitude(lng: number, lat: number): Promise<{ altitude: number; sceneType: string } | null> {
     const terrainAvoidance = this.game.getAutopilotManager().getTerrainAvoidance();
     if (!terrainAvoidance) return null;
 
-    const result = terrainAvoidance.calculateAutoAltitude(lng, lat);
+    const result = await terrainAvoidance.withHeights(() => terrainAvoidance.calculateAutoAltitude(lng, lat));
     return {
       altitude: Math.round(result.recommendedAltitude),
       sceneType: result.sceneType
@@ -431,21 +437,21 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
   /**
    * Calculate optimal altitude for a flight path
    */
-  public calculateAutoAltitudeForPath(waypoints: { lat: number; lon: number }[]): number | null {
+  public async calculateAutoAltitudeForPath(waypoints: { lat: number; lon: number }[]): Promise<number | null> {
     const terrainAvoidance = this.game.getAutopilotManager().getTerrainAvoidance();
     if (!terrainAvoidance) return null;
 
-    return terrainAvoidance.calculateAutoAltitudeForPath(waypoints);
+    return terrainAvoidance.withHeights(() => terrainAvoidance.calculateAutoAltitudeForPath(waypoints));
   }
 
   /**
    * Get altitude presets for current camera position
    */
-  public getAltitudePresets(lng: number, lat: number): { preset: string; altitude: number; description: string }[] | null {
+  public async getAltitudePresets(lng: number, lat: number): Promise<{ preset: string; altitude: number; description: string }[] | null> {
     const terrainAvoidance = this.game.getAutopilotManager().getTerrainAvoidance();
     if (!terrainAvoidance) return null;
 
-    return terrainAvoidance.getAltitudePresets(lng, lat);
+    return terrainAvoidance.withHeights(() => terrainAvoidance.getAltitudePresets(lng, lat));
   }
 }
 

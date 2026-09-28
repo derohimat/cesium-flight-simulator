@@ -22,6 +22,7 @@ export class CameraManager implements Updatable {
   private cameras: Map<CameraType, Camera> = new Map();
   private activeCamera: Camera | null = null;
   private activeCameraType: CameraType = 'follow';
+  private suspended = false;
   private cesiumCamera: Cesium.Camera;
 
   constructor(cesiumCamera: Cesium.Camera) {
@@ -92,10 +93,34 @@ export class CameraManager implements Updatable {
   }
 
   public update(deltaTime: number): void {
-    // Only update the active camera
-    if (this.activeCamera) {
+    // Only update the active camera, and only while nothing else (autopilot) owns the view.
+    if (this.activeCamera && !this.suspended) {
       this.activeCamera.update(deltaTime);
     }
+  }
+
+  /**
+   * Hand the Cesium camera to something else (autopilot flights, orbits, target lock).
+   * Vehicle cameras run in preUpdate, after camera flights and clock ticks have moved the
+   * view, so without this they re-aim at the vehicle every frame and the flight never shows.
+   */
+  public suspend(): void {
+    if (this.suspended) return;
+    this.suspended = true;
+    // Chase cameras leave the camera in the vehicle's local frame (lookAt). Return to world
+    // coordinates, keeping the current view, so flights start from exactly what's on screen.
+    this.cesiumCamera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+  }
+
+  public resume(): void {
+    if (!this.suspended) return;
+    this.suspended = false;
+    // Re-activate so the camera re-initialises from the vehicle instead of easing from stale state.
+    this.setActiveCamera(this.activeCameraType);
+  }
+
+  public isSuspended(): boolean {
+    return this.suspended;
   }
 
   // Camera-specific getters

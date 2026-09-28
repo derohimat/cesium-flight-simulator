@@ -6,6 +6,7 @@ export class ModeManager {
   private currentMode: GameMode = 'play';
   private cameraSpeed: number = 200; // Default speed
   private removeTickListener: (() => void) | undefined;
+  private lastBuilderTick = 0;
 
   constructor(
     private game: CesiumVehicleGame
@@ -84,6 +85,7 @@ export class ModeManager {
     ssc.enableLook = true;
 
     // Start Custom Camera Update Loop
+    this.lastBuilderTick = 0;
     this.removeTickListener = viewer.clock.onTick.addEventListener(() => {
       this.updateBuilderCamera();
     });
@@ -97,9 +99,10 @@ export class ModeManager {
   private updateBuilderCamera(): void {
     const input = this.game.getInputManager();
     const camera = this.game.getScene().camera;
-    const dt = 1.0 / 60.0; // Approximation, or get from clock? 
-    // Better to use actual frame time if possible, but viewer.clock.onTick doesn't pass dt directly easily always. 
-    // Let's assume 60fps or use simple multiplier.
+    // Real frame time: a fixed 1/60 s per tick made the camera speed scale with refresh rate.
+    const now = performance.now();
+    const dt = this.lastBuilderTick > 0 ? Math.min((now - this.lastBuilderTick) / 1000, 0.1) : 1 / 60;
+    this.lastBuilderTick = now;
 
     const moveAmount = this.cameraSpeed * dt;
 

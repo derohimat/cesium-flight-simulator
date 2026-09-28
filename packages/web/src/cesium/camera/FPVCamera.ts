@@ -1,5 +1,5 @@
 import * as Cesium from 'cesium';
-import { Camera } from './Camera';
+import { Camera, damp } from './Camera';
 
 /**
  * FPVCamera - First Person View camera that simulates a drone pilot's perspective
@@ -134,8 +134,9 @@ export class FPVCamera extends Camera {
         }
 
         // Smooth gimbal interpolation
-        this.gimbalPitch = Cesium.Math.lerp(this.gimbalPitch, this.targetGimbalPitch, this.gimbalLerpFactor);
-        this.gimbalYaw = Cesium.Math.lerp(this.gimbalYaw, this.targetGimbalYaw, this.gimbalLerpFactor);
+        const gimbalK = damp(this.gimbalLerpFactor, deltaTime);
+        this.gimbalPitch = Cesium.Math.lerp(this.gimbalPitch, this.targetGimbalPitch, gimbalK);
+        this.gimbalYaw = Cesium.Math.lerp(this.gimbalYaw, this.targetGimbalYaw, gimbalK);
 
         // Calculate look direction with gimbal offset
         const gimbalHpr = new Cesium.HeadingPitchRoll(
@@ -153,14 +154,11 @@ export class FPVCamera extends Camera {
         // Update FOV if wide mode
         const targetFov = this.gimbalInput.wideFov ? this.wideFov : this.standardFov;
         if (Math.abs(this.currentFov - targetFov) > 0.5) {
-            this.currentFov = Cesium.Math.lerp(this.currentFov, targetFov, 0.1);
-            const currentFrustum = this.cesiumCamera.frustum as Cesium.PerspectiveFrustum;
-            this.cesiumCamera.frustum = new Cesium.PerspectiveFrustum({
-                fov: Cesium.Math.toRadians(this.currentFov),
-                aspectRatio: currentFrustum.aspectRatio || 1.7777,
-                near: 1.0,
-                far: 5000000.0
-            });
+            this.currentFov = Cesium.Math.lerp(this.currentFov, targetFov, damp(0.1, deltaTime));
+            const frustum = this.cesiumCamera.frustum;
+            if (frustum instanceof Cesium.PerspectiveFrustum) {
+                frustum.fov = Cesium.Math.toRadians(this.currentFov);
+            }
         }
     }
 
