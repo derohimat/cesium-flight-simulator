@@ -1,31 +1,89 @@
+import { useState } from 'react';
 import { useGameMethod } from '../../../hooks/useGameMethod';
 import { useCameraState } from '../hooks/useCameraState';
 
-const CAMERA_LABELS: Record<string, string> = {
-  follow: 'Follow',
-  followClose: 'Close',
-};
+const CAMERA_MODES = [
+  { id: 'follow', name: 'Follow', icon: '🎥', description: 'Chase camera' },
+  { id: 'followClose', name: 'Close-Up', icon: '📹', description: 'Close chase' },
+  { id: 'fpv', name: 'FPV Drone', icon: '🚁', description: 'First-person' },
+  { id: 'cinematic', name: 'Cinematic', icon: '🎬', description: 'Pro shots' },
+];
 
 export function CameraControls() {
   const { switchCamera } = useGameMethod();
   const { cameraType } = useCameraState();
+  const [isOpen, setIsOpen] = useState(false);
+
+  const currentCamera = CAMERA_MODES.find(c => c.id === cameraType) || CAMERA_MODES[0];
 
   return (
-    <button 
-      onClick={switchCamera}
-      className="glass-panel px-4 py-2.5 hover:bg-white/10 transition-all duration-300 group"
-      title="Switch Camera (C)"
-    >
-      <div className="flex items-center gap-2">
-        <svg className="w-4 h-4 text-white/60 group-hover:text-white/90 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-        </svg>
-        <span className="text-xs font-medium text-white/80 group-hover:text-white transition-colors">
-          {CAMERA_LABELS[cameraType]}
-        </span>
-      </div>
-    </button>
+    <div className="relative">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="glass-panel px-4 py-2.5 hover:bg-white/10 transition-all duration-300 group"
+        title="Switch Camera (C)"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-lg">{currentCamera.icon}</span>
+          <span className="text-xs font-medium text-white/80 group-hover:text-white transition-colors">
+            {currentCamera.name}
+          </span>
+          <span className={`text-xs text-white/40 transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+        </div>
+      </button>
+
+      {/* Camera Mode Dropdown */}
+      {isOpen && (
+        <div className="absolute right-0 top-full mt-2 w-48 glass-panel p-2 space-y-1 animate-fade-in z-50">
+          {CAMERA_MODES.map((camera) => (
+            <button
+              key={camera.id}
+              onClick={() => {
+                // Cycle through cameras until we reach the desired one
+                let attempts = 0;
+                const maxAttempts = CAMERA_MODES.length;
+                const cycleTo = () => {
+                  if (cameraType !== camera.id && attempts < maxAttempts) {
+                    switchCamera();
+                    attempts++;
+                    setTimeout(cycleTo, 50);
+                  }
+                };
+                cycleTo();
+                setIsOpen(false);
+              }}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${cameraType === camera.id
+                  ? 'bg-future-primary/30 text-white'
+                  : 'hover:bg-white/10 text-white/70'
+                }`}
+            >
+              <span className="text-xl">{camera.icon}</span>
+              <div className="text-left flex-1">
+                <div className="text-sm font-medium">{camera.name}</div>
+                <div className="text-xs text-white/50">{camera.description}</div>
+              </div>
+              {cameraType === camera.id && (
+                <span className="text-future-primary text-sm">✓</span>
+              )}
+            </button>
+          ))}
+
+          {/* Quick switch hint */}
+          <div className="pt-2 mt-2 border-t border-white/10">
+            <p className="text-xs text-white/40 text-center">
+              Press <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/60 mx-1">C</kbd> to cycle
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Click outside to close */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+    </div>
   );
 }
-
-

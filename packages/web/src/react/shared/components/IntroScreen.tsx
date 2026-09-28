@@ -9,53 +9,65 @@ export function IntroScreen() {
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 z-[180] bg-black/60 backdrop-blur-lg flex items-center justify-center animate-fade-in">
-      <div className="max-w-2xl w-full mx-4">
-        <div className="glass-panel p-8 space-y-6">
+    <div className="fixed inset-0 z-[180] bg-black/80 backdrop-blur-xl flex items-center justify-center animate-fade-in">
+      <div className="max-w-3xl w-full mx-4">
+        <div className="glass-panel p-8 space-y-6 border-future-primary/30">
           {/* Header */}
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-future-primary to-future-secondary bg-clip-text text-transparent">
-              Welcome to Glenn
-            </h1>
-            <p className="text-white/60 text-sm">
-              {isMobile ? 'Touch controls for intuitive flight' : 'Master the skies with these simple controls'}
+          <div className="text-center space-y-3">
+            <div className="flex items-center justify-center gap-3 mb-2">
+              <span className="text-4xl">🎬</span>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-future-primary via-future-accent to-future-secondary bg-clip-text text-transparent">
+                SkyStudio
+              </h1>
+            </div>
+            <p className="text-lg text-white/70 font-light">
+              Create stunning aerial content with cinematic drone flights
             </p>
+            <div className="flex items-center justify-center gap-4 text-xs text-white/50">
+              <span className="flex items-center gap-1">🎥 Cinematic Recording</span>
+              <span className="flex items-center gap-1">🌍 Real-World Locations</span>
+              <span className="flex items-center gap-1">✨ Professional Output</span>
+            </div>
           </div>
 
           {isMobile ? <MobileControls /> : <DesktopControls />}
 
-          {/* Quick Tips */}
-          <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-            <h3 className="text-xs uppercase tracking-wider text-future-primary font-semibold mb-2">Quick Tips</h3>
+          {/* Quick Tips - Updated for content creation */}
+          <div className="bg-gradient-to-br from-future-primary/10 to-future-secondary/10 border border-future-primary/20 rounded-xl p-4">
+            <h3 className="text-xs uppercase tracking-wider text-future-primary font-semibold mb-2">🚀 Getting Started</h3>
             <ul className="space-y-1.5 text-xs text-white/60">
               {isMobile ? (
                 <>
                   <li className="flex items-start gap-2">
-                    <span className="text-future-primary mt-0.5">•</span>
-                    <span>Touch controls respond to your finger movements</span>
+                    <span className="text-future-accent mt-0.5">✦</span>
+                    <span>Use <strong className="text-white/80">Director Mode</strong> to plan cinematic flight paths</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-future-primary mt-0.5">•</span>
-                    <span>Maintain altitude to avoid crashing into terrain</span>
+                    <span className="text-future-accent mt-0.5">✦</span>
+                    <span>Toggle <strong className="text-white/80">Portrait Mode</strong> for social media-ready content</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-future-primary mt-0.5">•</span>
-                    <span>Feel the haptic feedback as you fly</span>
+                    <span className="text-future-accent mt-0.5">✦</span>
+                    <span>Enable <strong className="text-white/80">Auto-Record</strong> to capture your flights automatically</span>
                   </li>
                 </>
               ) : (
                 <>
                   <li className="flex items-start gap-2">
-                    <span className="text-future-primary mt-0.5">•</span>
-                    <span>Use the <strong className="text-white/80">Teleport button</strong> to instantly travel to iconic locations</span>
+                      <span className="text-future-accent mt-0.5">✦</span>
+                      <span>Use <strong className="text-white/80">Director Mode</strong> (left panel) to create waypoint-based flight paths</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-future-primary mt-0.5">•</span>
-                    <span>Maintain altitude to avoid crashing into terrain</span>
+                      <span className="text-future-accent mt-0.5">✦</span>
+                      <span>Search any location and add waypoints for your cinematic route</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-future-primary mt-0.5">•</span>
-                    <span>Press <strong className="text-white/80">M</strong> to switch between flight and ground mode</span>
+                      <span className="text-future-accent mt-0.5">✦</span>
+                      <span>Choose between <strong className="text-white/80">Linear</strong>, <strong className="text-white/80">Orbit</strong>, or <strong className="text-white/80">Target Lock</strong> flight modes</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-future-accent mt-0.5">✦</span>
+                      <span>Press <strong className="text-white/80">C</strong> to cycle camera views for different perspectives</span>
                   </li>
                 </>
               )}
@@ -63,15 +75,16 @@ export function IntroScreen() {
           </div>
 
           {/* Start Button */}
-          <div className="flex justify-center pt-2">
+          <div className="flex flex-col items-center gap-3 pt-2">
             <Button
               onClick={() => setIsVisible(false)}
               variant="primary"
               size="lg"
-              className="px-12"
+              className="px-16 py-4 text-lg font-semibold shadow-glow-lg"
             >
-              Start Flying
+              🎬 Start Creating
             </Button>
+            <p className="text-xs text-white/40">No account required • Free to use</p>
           </div>
         </div>
       </div>

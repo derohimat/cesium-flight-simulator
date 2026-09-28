@@ -17,7 +17,7 @@ export function useGameMethod() {
     toggleCollisionDetection: () => bridge.toggleCollisionDetection(),
     getCollisionDetection: (): boolean => bridge.getCollisionDetection(),
     getVehicleState: (): VehicleStateData | null => bridge.getVehicleState(),
-    teleportTo: (longitude: number, latitude: number, altitude: number, heading?: number) => 
+    teleportTo: (longitude: number, latitude: number, altitude: number, heading?: number) =>
       bridge.teleportTo(longitude, latitude, altitude, heading),
     restart: () => bridge.restart(),
     getQualitySettings: (): QualityConfig => bridge.getQualitySettings(),
@@ -30,6 +30,24 @@ export function useGameMethod() {
     setAdaptiveQuality: (enabled: boolean) => bridge.setAdaptiveQuality(enabled),
     getPerformanceStats: (): PerformanceStatsData => bridge.getPerformanceStats(),
     getFrameHistory: () => bridge.getFrameHistory(),
+    flyPath: (waypoints: { lat: number; lon: number }[], options?: { speed?: number; altitude?: number }) => bridge.flyPath(waypoints, options),
+    startRecording: () => bridge.startRecording(),
+    stopRecording: (fileName?: string) => bridge.stopRecording(fileName),
+    startOrbit: (lat: number, lon: number, height: number, radius?: number, speed?: number, onComplete?: () => void) =>
+      bridge.startOrbit(lat, lon, height, radius, speed, onComplete),
+    stopOrbit: () => bridge.stopOrbit(),
+    flyPathWithTargetLock: (waypoints: { lat: number; lon: number }[], target: { lat: number; lon: number }, options?: { speed?: number; duration?: number }) =>
+      bridge.flyPathWithTargetLock(waypoints, target, options || {}),
+    stopLock: () => bridge.stopLock(),
+    setVehicleVisibility: (visible: boolean) => bridge.setVehicleVisibility(visible),
+    showFlightGuide: (target: { lat: number; lon: number }) => bridge.showFlightGuide(target),
+    hideFlightGuide: () => bridge.hideFlightGuide(),
+    getCurrentCameraPosition: () => bridge.getCurrentCameraPosition(),
+    setCameraSpeed: (speed: number) => bridge.setCameraSpeed(speed),
+    // Auto altitude methods for best view
+    calculateAutoAltitude: (lng: number, lat: number) => bridge.calculateAutoAltitude(lng, lat),
+    calculateAutoAltitudeForPath: (waypoints: { lat: number; lon: number }[]) => bridge.calculateAutoAltitudeForPath(waypoints),
+    getAltitudePresets: (lng: number, lat: number) => bridge.getAltitudePresets(lng, lat),
   }), [bridge]);
 }
 

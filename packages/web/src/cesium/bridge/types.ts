@@ -21,6 +21,15 @@ export interface CameraStateData {
   type: CameraType;
 }
 
+export interface CameraPositionData {
+  latitude: number;
+  longitude: number;
+  altitude: number;
+  heading: number;
+  pitch: number;
+  roll: number;
+}
+
 export interface RoverModeData {
   enabled: boolean;
 }
@@ -70,6 +79,7 @@ export interface GameEvents {
   gameReady: GameReadyData;
   vehicleStateChanged: VehicleStateData;
   cameraChanged: CameraStateData;
+  cameraPositionChanged: CameraPositionData;
   roverModeChanged: RoverModeData;
   collisionDetectionChanged: CollisionDetectionData;
   playersUpdated: PlayersData;

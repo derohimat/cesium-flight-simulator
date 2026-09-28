@@ -10,3 +10,11 @@ html, body, #cesiumContainer {
 body {
   background: #000;
 }
+
+body.portrait-mode #cesiumContainer {
+  width: 56.25vh !important; /* 9/16 * 100vh = 56.25vh */
+  height: 100vh !important;
+  margin: 0 auto; /* Center it */
+  position: relative;
+  box-shadow: 0 0 50px rgba(0,0,0,0.5);
+}

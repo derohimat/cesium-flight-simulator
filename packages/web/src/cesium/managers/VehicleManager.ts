@@ -266,6 +266,12 @@ export class VehicleManager implements FixedUpdatable {
     this.activeVehicle = null;
   }
 
+  public setVehicleVisibility(visible: boolean): void {
+    if (this.activeVehicle) {
+      this.activeVehicle.setVisible(visible);
+    }
+  }
+
   public onVehicleChange(callback: (vehicle: Vehicle) => void): void {
     this.onVehicleChangeCallback = callback;
   }

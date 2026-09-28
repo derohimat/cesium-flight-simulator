@@ -1,0 +1,3 @@
+## 2024-03-05 - Optimize React re-renders in DirectorPanel
+**Learning:** React state hooks (like `useCameraPosition` which updates at 4fps) trigger re-renders of the entire component they are called in. When a heavy component like `DirectorPanel` calls such a hook but only passes the data down to a small child component (`TelemetryHUD`), it causes unnecessary re-renders of the entire panel.
+**Action:** Move frequently updating hooks down into the specific leaf components that actually need the data (lifting state down / isolating re-renders) to improve performance and prevent parent components from re-rendering continuously.

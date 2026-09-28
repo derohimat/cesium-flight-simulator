@@ -18,6 +18,12 @@ export function CrashScreen() {
     if (!isCrashed) return;
 
     const handleKeyPress = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in form fields
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) {
+        return;
+      }
+
       if (e.key === 'r' || e.key === 'R') {
         e.preventDefault();
         restart();

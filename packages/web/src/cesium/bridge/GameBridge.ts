@@ -1,6 +1,6 @@
 import * as Cesium from 'cesium';
 import { TypedEventEmitter } from './TypedEventEmitter';
-import type { GameEvents, VehicleStateData, GameMode, PerformanceStatsData } from './types';
+import type { GameEvents, VehicleStateData, GameMode, PerformanceStatsData, CameraPositionData } from './types';
 import type { CesiumVehicleGame } from '../bootstrap/main';
 import type { CameraType } from '../managers/CameraManager';
 import type { QualityConfig } from '../core/Scene';
@@ -12,6 +12,7 @@ import type { FrameHook } from '../core/GameLoop';
 
 /** UI refresh rates. Faster only burns main-thread time the renderer needs. */
 const VEHICLE_STATE_INTERVAL_MS = 1000 / 30;
+const CAMERA_STATE_INTERVAL_MS = 100;
 const PERFORMANCE_STATS_INTERVAL_MS = 250;
 
 export class GameBridge extends TypedEventEmitter<GameEvents> {
@@ -21,6 +22,7 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
   private frameHook: FrameHook;
   private lastVehicleEmit = 0;
   private lastStatsEmit = 0;
+  private lastCameraEmit = 0;
   private lastCrashed = false;
   private static readonly scratchCartographic = new Cesium.Cartographic();
 
@@ -57,6 +59,10 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
       this.lastVehicleEmit = now;
       this.emitVehicleState();
     }
+    if (now - this.lastCameraEmit >= CAMERA_STATE_INTERVAL_MS && this.listenerCount('cameraPositionChanged') > 0) {
+      this.lastCameraEmit = now;
+      this.emit('cameraPositionChanged', this.getCurrentCameraPosition());
+    }
     if (now - this.lastStatsEmit >= PERFORMANCE_STATS_INTERVAL_MS && this.listenerCount('performanceStats') > 0) {
       this.lastStatsEmit = now;
       this.emit('performanceStats', this.getPerformanceStats());
@@ -65,6 +71,7 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
 
   private emitVehicleState(): void {
     const vehicle = this.game.getVehicleManager().getActiveVehicle();
+
     if (vehicle && vehicle.isModelReady()) {
       this.emit('vehicleStateChanged', this.toVehicleStateData(vehicle));
 
@@ -190,6 +197,19 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
       return this.toVehicleStateData(vehicle);
     }
     return null;
+  }
+
+  public getCurrentCameraPosition(): CameraPositionData {
+    const camera = this.game.getScene().camera;
+    const positionCartographic = Cesium.Cartographic.fromCartesian(camera.position);
+    return {
+      latitude: Cesium.Math.toDegrees(positionCartographic.latitude),
+      longitude: Cesium.Math.toDegrees(positionCartographic.longitude),
+      altitude: positionCartographic.height,
+      heading: Cesium.Math.toDegrees(camera.heading),
+      pitch: Cesium.Math.toDegrees(camera.pitch),
+      roll: Cesium.Math.toDegrees(camera.roll),
+    };
   }
 
   public teleportTo(longitude: number, latitude: number, altitude: number, heading: number = 0): void {
@@ -329,6 +349,103 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
 
   public setThrottle(percent: number): void {
     this.game.getInputManager().setThrottlePercent(percent * 100);
+  }
+
+  public async flyPath(waypoints: { lat: number; lon: number }[], options: { speed?: number; altitude?: number } = {}): Promise<void> {
+    await this.game.getAutopilotManager().flyPath(waypoints, options);
+  }
+
+  public startRecording(): void {
+    this.game.getRecordingManager().startRecording();
+  }
+
+  public stopRecording(fileName?: string): void {
+    this.game.getRecordingManager().stopRecording(fileName);
+  }
+
+  public showFlightGuide(target: { lat: number, lon: number }): void {
+    const targetCart = Cesium.Cartographic.fromDegrees(target.lon, target.lat);
+    this.game.getAutopilotManager().showGuideLine(targetCart);
+  }
+
+  public hideFlightGuide(): void {
+    this.game.getAutopilotManager().hideGuideLine();
+  }
+
+  public startOrbit(lat: number, lon: number, height: number, radius: number = 200, speed: number = 0.5, onComplete?: () => void): void {
+    const center = new Cesium.Cartographic(
+      Cesium.Math.toRadians(lon),
+      Cesium.Math.toRadians(lat),
+      height
+    );
+    this.game.getAutopilotManager().startOrbit(center, radius, speed, onComplete);
+  }
+
+  public stopOrbit(): void {
+    this.game.getAutopilotManager().stopOrbit();
+  }
+
+  public flyPathWithTargetLock(waypoints: { lat: number; lon: number }[], target: { lat: number; lon: number }, options: { speed?: number; duration?: number } = {}): void {
+    const defaultAltitude = 300; 
+    const path = waypoints.map(wp => new Cesium.Cartographic(Cesium.Math.toRadians(wp.lon), Cesium.Math.toRadians(wp.lat), defaultAltitude)); // Flight altitude handling is inside AutopilotManager for spline sampling?
+    // Wait, flyPathWithTargetLock in AutopilotManager takes Cartographic[] path. 
+    // The previous implementation hardcoded 300m height in GameBridge map.
+    // The previous AutopilotManager implementation uses spline.evaluate(elapsed).
+    // If the path points have 300m height, the camera will fly at 300m height.
+    // We should probably allow altitude override here too?
+    // For now let's just update the signature to pass options.
+    
+    // Actually, let's respect the visual guide height if possible, but the path is just waypoints.
+    // Let's assume the user wants to fly AT the set altitude.
+    
+    const targetCart = new Cesium.Cartographic(Cesium.Math.toRadians(target.lon), Cesium.Math.toRadians(target.lat), 0);
+    this.game.getAutopilotManager().flyPathWithTargetLock(path, targetCart, options);
+  }
+
+  public stopLock(): void {
+    this.game.getAutopilotManager().stopLock();
+  }
+
+  public setVehicleVisibility(visible: boolean): void {
+    this.game.getVehicleManager().setVehicleVisibility(visible);
+  }
+
+  public setCameraSpeed(speed: number): void {
+    this.modeManager.setCameraSpeed(speed);
+  }
+
+  /**
+   * Calculate optimal altitude for best view at a location
+   */
+  public calculateAutoAltitude(lng: number, lat: number): { altitude: number; sceneType: string } | null {
+    const terrainAvoidance = this.game.getAutopilotManager().getTerrainAvoidance();
+    if (!terrainAvoidance) return null;
+
+    const result = terrainAvoidance.calculateAutoAltitude(lng, lat);
+    return {
+      altitude: Math.round(result.recommendedAltitude),
+      sceneType: result.sceneType
+    };
+  }
+
+  /**
+   * Calculate optimal altitude for a flight path
+   */
+  public calculateAutoAltitudeForPath(waypoints: { lat: number; lon: number }[]): number | null {
+    const terrainAvoidance = this.game.getAutopilotManager().getTerrainAvoidance();
+    if (!terrainAvoidance) return null;
+
+    return terrainAvoidance.calculateAutoAltitudeForPath(waypoints);
+  }
+
+  /**
+   * Get altitude presets for current camera position
+   */
+  public getAltitudePresets(lng: number, lat: number): { preset: string; altitude: number; description: string }[] | null {
+    const terrainAvoidance = this.game.getAutopilotManager().getTerrainAvoidance();
+    if (!terrainAvoidance) return null;
+
+    return terrainAvoidance.getAltitudePresets(lng, lat);
   }
 }
 
