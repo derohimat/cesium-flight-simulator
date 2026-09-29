@@ -127,6 +127,7 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
       pitch: state.pitch,
       roll: state.roll,
       collisionAssistActive: vehicle instanceof Aircraft && vehicle.isCollisionAssistActive(),
+      landed: vehicle instanceof Aircraft && vehicle.isLanded(),
       longitude: carto ? Cesium.Math.toDegrees(carto.longitude) : 0,
       latitude: carto ? Cesium.Math.toDegrees(carto.latitude) : 0,
       altitude: carto ? carto.height : 0,
@@ -273,7 +274,8 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
       altitude: positionCartographic.height,
       heading: Cesium.Math.toDegrees(camera.heading),
       pitch: Cesium.Math.toDegrees(camera.pitch),
-      roll: Cesium.Math.toDegrees(camera.roll),
+      // Cesium reports roll in [0, 2π); level flight read as "360°". Show it as ±180°.
+      roll: Cesium.Math.toDegrees(Cesium.Math.negativePiToPi(camera.roll)),
     };
   }
 

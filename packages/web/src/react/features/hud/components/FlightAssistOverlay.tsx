@@ -23,6 +23,15 @@ export function FlightAssistOverlay() {
         </div>
       )}
 
+      {vehicle?.landed && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
+          <div className="glass-panel px-5 py-2.5 text-sm text-white/80">
+            🛬 On the ground — hold <kbd className="px-1 bg-white/10 rounded">W</kbd> to take off,{' '}
+            <kbd className="px-1 bg-white/10 rounded">A</kbd>/<kbd className="px-1 bg-white/10 rounded">D</kbd> to steer
+          </div>
+        </div>
+      )}
+
       {vehicle?.collisionAssistActive && (
         <div className="fixed top-[38%] left-1/2 -translate-x-1/2 z-50 pointer-events-none text-center" role="alert">
           <div className="px-6 py-2 rounded-lg border-2 border-red-500 bg-red-600/25 text-red-300

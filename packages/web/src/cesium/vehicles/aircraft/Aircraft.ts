@@ -5,6 +5,29 @@ import { AircraftPhysics, AircraftInput } from './AircraftPhysics';
 interface AircraftConfig extends VehicleConfig {
 }
 
+/** What the aircraft was doing when it met the surface, for judging a landing. */
+export interface TouchdownInfo {
+  position: Cesium.Cartesian3;
+  /** Vehicle frame (0 = east); compass bearing = degrees(heading) + 90. */
+  heading: number;
+  speed: number;
+  /** Downward speed at contact, m/s. */
+  sinkRate: number;
+  pitch: number;
+  roll: number;
+  /** Height of the surface touched (ellipsoidal metres). */
+  surfaceHeight: number;
+}
+
+/** Ground handling after a landing. */
+const GEAR_HEIGHT = 3;
+const ROLLOUT_BRAKING = 6; // m/s² coasting
+const ROLLOUT_HARD_BRAKING = 12; // m/s² holding S
+const ROLLOUT_ACCELERATION = 8; // m/s² holding W
+const TAKEOFF_SPEED = 45;
+const TAKEOFF_CLIMB_SECONDS = 3;
+const GROUND_STEER_RATE = Cesium.Math.toRadians(15);
+
 /**
  * Collision probing is scheduled by clearance instead of every N frames. The old scheme fired
  * two height queries (four full pick renders, since the plane itself was pickable) together on
@@ -65,6 +88,16 @@ export class Aircraft extends Vehicle {
   private gcasEnabled = true;
   private gcasActive = false;
   private gcasClearFor = 0;
+  private gcasInhibited = false;
+  private touchdownHandler: ((info: TouchdownInfo) => boolean) | null = null;
+  private landed = false;
+  private rolloutGround = 0;
+  private takeoffClimb = 0;
+  private lastStepDt = 1 / 60;
+  private readonly takeoffInput: AircraftInput = {
+    throttle: false, brake: false, turnLeft: false, turnRight: false,
+    altitudeUp: true, altitudeDown: false, rollLeft: false, rollRight: false,
+  };
   private readonly gcasInput: AircraftInput = {
     throttle: false, brake: false, turnLeft: false, turnRight: false,
     altitudeUp: true, altitudeDown: false, rollLeft: false, rollRight: false,
@@ -107,8 +140,21 @@ export class Aircraft extends Vehicle {
 
   protected step(deltaTime: number): void {
     if (this.crashed) return;
+    this.lastStepDt = deltaTime;
+    if (this.landed) {
+      this.rollout(deltaTime);
+      return;
+    }
 
-    const result = this.physics.update(deltaTime, this.gcasEnabled ? this.applyGcas(deltaTime) : this.input);
+    let input: AircraftInput;
+    if (this.takeoffClimb > 0) {
+      // Rotate and climb out after lift-off (not a collision warning, so no GCAS here).
+      this.takeoffClimb -= deltaTime;
+      input = Object.assign(this.takeoffInput, { targetSpeed: this.input.targetSpeed, throttle: this.input.throttle });
+    } else {
+      input = this.gcasEnabled && !this.gcasInhibited ? this.applyGcas(deltaTime) : this.input;
+    }
+    const result = this.physics.update(deltaTime, input);
 
     this.hpRoll.heading = result.heading;
     this.hpRoll.pitch = result.pitch;
@@ -181,8 +227,8 @@ export class Aircraft extends Vehicle {
 
     const groundHeight = this.groundSampler.sampleHeight(here, [this.primitive]);
     this.groundClearance = groundHeight === undefined ? Infinity : here.height - groundHeight;
-    if (this.groundClearance <= CRASH_MARGIN) {
-      this.crash();
+    if (groundHeight !== undefined && this.groundClearance <= CRASH_MARGIN) {
+      this.touchdownOrCrash(groundHeight);
       return;
     }
     this.nextGroundProbeAt =
@@ -207,7 +253,12 @@ export class Aircraft extends Vehicle {
 
     // Crash if we'd reach the obstacle before the next dense probe (always ≥ the old 2 m nose).
     if (hitDistance <= NOSE_DISTANCE + LOW_LEVEL_PROBE_SPACING) {
-      this.crash();
+      const hit = Cesium.Cartesian3.add(
+        ray.origin,
+        Cesium.Cartesian3.multiplyByScalar(ray.direction, hitDistance, new Cesium.Cartesian3()),
+        new Cesium.Cartesian3()
+      );
+      this.touchdownOrCrash(Cesium.Cartographic.fromCartesian(hit).height);
       return;
     }
 
@@ -216,6 +267,96 @@ export class Aircraft extends Vehicle {
     this.obstacleAhead = hitDistance <= this.speed * OBSTACLE_WARNING_TIME;
     this.nextForwardProbeAt =
       this.simTime + (this.isLowLevel() ? denseInterval : HIGH_LEVEL_INTERVAL);
+  }
+
+  /**
+   * Surface contact: a landing if the active mission accepts it (right place, gentle enough),
+   * otherwise a crash.
+   */
+  private touchdownOrCrash(surfaceHeight: number): void {
+    if (this.touchdownHandler) {
+      const up = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(this.position, Aircraft.scratchUp);
+      const sinkRate = -Cesium.Cartesian3.dot(this.lastStepDelta, up) / this.lastStepDt;
+      const landed = this.touchdownHandler({
+        position: this.position,
+        heading: this.hpRoll.heading,
+        speed: this.speed,
+        sinkRate,
+        pitch: this.hpRoll.pitch,
+        roll: this.hpRoll.roll,
+        surfaceHeight,
+      });
+      if (landed) {
+        this.beginRollout(surfaceHeight);
+        return;
+      }
+    }
+    this.crash();
+  }
+
+  private beginRollout(surfaceHeight: number): void {
+    this.landed = true;
+    this.rolloutGround = surfaceHeight;
+    this.gcasActive = false;
+    this.setHeightAboveGround();
+    console.log('🛬 Touchdown');
+  }
+
+  /** On the ground: brake (or accelerate with W), steer with A/D, lift off at TAKEOFF_SPEED. */
+  private rollout(dt: number): void {
+    const accel = this.input.throttle
+      ? ROLLOUT_ACCELERATION
+      : -(this.input.brake ? ROLLOUT_HARD_BRAKING : ROLLOUT_BRAKING);
+    this.speed = Math.max(0, Math.min(this.speed + accel * dt, 120));
+    this.velocity = this.speed;
+
+    const steer = (this.input.turnRight || this.input.rollRight ? 1 : 0) - (this.input.turnLeft || this.input.rollLeft ? 1 : 0);
+    if (this.speed > 1) {
+      this.hpRoll.heading = Cesium.Math.zeroToTwoPi(this.hpRoll.heading + steer * GROUND_STEER_RATE * dt);
+    }
+    this.hpRoll.pitch = Cesium.Math.lerp(this.hpRoll.pitch, 0, 0.1);
+    this.hpRoll.roll = Cesium.Math.lerp(this.hpRoll.roll, 0, 0.1);
+
+    // Roll along the heading, on the surface.
+    Cesium.Transforms.eastNorthUpToFixedFrame(this.position, undefined, Aircraft.scratchTransform);
+    const local = new Cesium.Cartesian3(Math.cos(this.hpRoll.heading), -Math.sin(this.hpRoll.heading), 0);
+    const step = Cesium.Matrix4.multiplyByPointAsVector(Aircraft.scratchTransform, local, Aircraft.scratchWorldForward);
+    Cesium.Cartesian3.multiplyByScalar(step, this.speed * dt, this.lastStepDelta);
+    Cesium.Cartesian3.add(this.position, this.lastStepDelta, this.position);
+    this.setHeightAboveGround();
+    this.simTime += dt;
+
+    if (this.input.throttle && this.speed >= TAKEOFF_SPEED) {
+      this.landed = false;
+      this.physics.reset(this.hpRoll.heading, this.speed);
+      this.takeoffClimb = TAKEOFF_CLIMB_SECONDS;
+      this.groundClearance = GEAR_HEIGHT;
+      this.nextGroundProbeAt = this.simTime + TAKEOFF_CLIMB_SECONDS; // wheels just left the ground
+      console.log('🛫 Lift-off');
+    }
+  }
+
+  private setHeightAboveGround(): void {
+    const c = Cesium.Cartographic.fromCartesian(this.position, Cesium.Ellipsoid.WGS84, Aircraft.scratchCartographic);
+    if (!c) return;
+    c.height = this.rolloutGround + GEAR_HEIGHT;
+    Cesium.Cartographic.toCartesian(c, Cesium.Ellipsoid.WGS84, this.position);
+  }
+
+  /** Judge surface contact as a possible landing (set by a landing mission); null = always crash. */
+  public setTouchdownHandler(handler: ((info: TouchdownInfo) => boolean) | null): void {
+    this.touchdownHandler = handler;
+  }
+
+  /** Stand auto-GCAS down, e.g. on final approach, where it would fight every landing. */
+  public setCollisionAssistInhibited(inhibited: boolean): void {
+    this.gcasInhibited = inhibited;
+    if (inhibited) this.gcasActive = false;
+  }
+
+  /** On the ground after a landing (hold W to take off). */
+  public isLanded(): boolean {
+    return this.landed;
   }
 
   /** Pilot input, or the pull-up override while a collision is imminent. */
@@ -284,6 +425,8 @@ export class Aircraft extends Vehicle {
     this.hpRoll.pitch = 0;
     this.hpRoll.roll = 0;
     this.velocity = this.speed = Math.max(speed, this.physics.getMinSpeed());
+    this.landed = false;
+    this.takeoffClimb = 0;
     Cesium.Cartesian3.clone(Cesium.Cartesian3.ZERO, this.lastStepDelta);
     this.resetCrash();
     this.snapToSimulation();

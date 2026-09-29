@@ -96,6 +96,9 @@ export function MissionHUD() {
         </div>
       </div>
 
+      {mission.hint && (
+        <div className="glass-panel px-3 py-1 text-xs text-yellow-300 animate-fade-in">{mission.hint}</div>
+      )}
       {split && (
         <div className="glass-panel px-3 py-1 text-xs text-green-300 tabular-nums animate-fade-in">✓ {split}</div>
       )}

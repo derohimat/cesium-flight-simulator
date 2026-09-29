@@ -15,6 +15,8 @@ export interface VehicleStateData {
   roll: number;
   /** Auto-GCAS is currently pulling the aircraft away from terrain. */
   collisionAssistActive: boolean;
+  /** On the ground after a landing (hold W to take off). */
+  landed: boolean;
   /** Degrees / metres, precomputed so UI code doesn't need Cesium math. */
   longitude: number;
   latitude: number;

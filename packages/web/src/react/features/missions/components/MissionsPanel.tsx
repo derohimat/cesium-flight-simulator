@@ -8,6 +8,7 @@ import type { MissionDefinition, MissionKind } from '../../../../cesium/missions
 const KIND_LABEL: Record<MissionKind, { icon: string; label: string }> = {
   sightseeing: { icon: '🗺️', label: 'Sightseeing' },
   timeTrial: { icon: '⏱️', label: 'Time Trials' },
+  landing: { icon: '🛬', label: 'Landings' },
 };
 
 export function Stars({ count, size = 'text-sm' }: { count: number; size?: string }) {
@@ -48,7 +49,7 @@ export function MissionsPanel() {
   return (
     <Panel title="Missions" className="w-[320px]">
       <div className="space-y-4">
-        {(['sightseeing', 'timeTrial'] as MissionKind[]).map((kind) => (
+        {(['sightseeing', 'timeTrial', 'landing'] as MissionKind[]).map((kind) => (
           <div key={kind} className="space-y-2">
             <div className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">
               {KIND_LABEL[kind].icon} {KIND_LABEL[kind].label}
@@ -68,7 +69,7 @@ export function MissionsPanel() {
                   </div>
                   <div className="text-xs text-white/50 mt-0.5">{m.summary}</div>
                   <div className="flex justify-between text-[10px] text-white/40 mt-1.5">
-                    <span>{m.region} · {m.objectives.length} {m.objectives[0]?.type === 'ring' ? 'gates' : 'stops'}</span>
+                    <span>{m.region} · {objectiveSummary(m)}</span>
                     {record && <span className="font-mono">Best {formatTime(record.bestTime)}</span>}
                   </div>
                 </button>
@@ -79,6 +80,12 @@ export function MissionsPanel() {
       </div>
     </Panel>
   );
+}
+
+function objectiveSummary(m: MissionDefinition): string {
+  const type = m.objectives[0]?.type;
+  if (type === 'land') return m.objectives[0].type === 'land' && m.objectives[0].surface === 'water' ? 'water landing' : 'runway landing';
+  return `${m.objectives.length} ${type === 'ring' ? 'gates' : 'stops'}`;
 }
 
 interface BriefingProps {
@@ -98,6 +105,21 @@ function MissionBriefing({ mission, busy, bestTime, onBack, onStart }: BriefingP
         </div>
         <p className="text-sm text-white/80 leading-relaxed">{mission.briefing}</p>
 
+        {mission.scoring === 'landing' ? (
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[
+              ['3 stars', 'Butter', '< 1.5 m/s, centred'],
+              ['2 stars', 'Smooth', '< 3 m/s'],
+              ['1 star', 'Firm', '≤ 6 m/s'],
+            ].map(([stars, grade, detail]) => (
+              <div key={grade} className="bg-white/5 rounded-lg p-2">
+                <div className="text-[10px] text-white/40 uppercase">{stars}</div>
+                <div className="text-sm text-white">{grade}</div>
+                <div className="text-[10px] text-white/50">{detail}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
         <div className="grid grid-cols-3 gap-2 text-center">
           <div className="bg-white/5 rounded-lg p-2">
             <div className="text-[10px] text-white/40 uppercase">3 stars</div>
@@ -114,6 +136,7 @@ function MissionBriefing({ mission, busy, bestTime, onBack, onStart }: BriefingP
             </div>
           </div>
         </div>
+        )}
 
         <div className="text-[10px] text-white/40 leading-relaxed">
           <kbd className="px-1 bg-white/10 rounded">W</kbd>/<kbd className="px-1 bg-white/10 rounded">S</kbd> speed ·{' '}
