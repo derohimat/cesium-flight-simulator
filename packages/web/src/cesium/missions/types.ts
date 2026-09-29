@@ -1,4 +1,4 @@
-export type MissionKind = 'sightseeing' | 'timeTrial';
+export type MissionKind = 'sightseeing' | 'timeTrial' | 'landing';
 
 /** Fly into a vertical cylinder around a place. Heights are metres above the ground there. */
 export interface ReachObjective {
@@ -26,7 +26,43 @@ export interface RingObjective {
   bearing?: number;
 }
 
-export type Objective = ReachObjective | RingObjective;
+/**
+ * Touch down inside a marked zone (runway or water), flying `bearing`. Contact with the surface
+ * here is judged as a landing instead of a crash.
+ */
+export interface LandObjective {
+  type: 'land';
+  name: string;
+  /** Centre of the touchdown zone. */
+  lat: number;
+  lon: number;
+  /** Landing direction, degrees clockwise from north. */
+  bearing: number;
+  /** Zone size in metres (along / across the landing direction). */
+  length: number;
+  width: number;
+  surface: 'runway' | 'water';
+  fact?: string;
+}
+
+export type Objective = ReachObjective | RingObjective | LandObjective;
+
+/** Touchdown limits: exceed any and it's a hard landing. */
+export const TOUCHDOWN_LIMITS = {
+  maxSinkRate: 6, // m/s
+  maxSpeed: 80, // m/s
+  maxRollDeg: 20,
+  minPitchDeg: -12,
+  maxHeadingErrorDeg: 30,
+};
+
+export interface LandingReport {
+  sinkRate: number;
+  speed: number;
+  /** Distance from the centreline, metres. */
+  centerlineOffset: number;
+  grade: 'Butter' | 'Smooth' | 'Firm';
+}
 
 export interface MissionDefinition {
   id: string;
@@ -49,6 +85,8 @@ export interface MissionDefinition {
   timeLimit?: number;
   /** Finish within `gold` seconds for 3 stars, `silver` for 2; any finish earns 1. */
   par: { gold: number; silver: number };
+  /** How stars are earned: by time (default) or by the quality of the final landing. */
+  scoring?: 'time' | 'landing';
 }
 
 export type MissionStatus = 'idle' | 'preparing' | 'countdown' | 'active' | 'completed' | 'failed';
@@ -71,6 +109,8 @@ export interface MissionSnapshot {
   /** Target direction relative to the aircraft's nose, degrees (-180..180, + = right). */
   relativeBearing: number;
   verticalCue: 'climb' | 'descend' | null;
+  /** Coaching for the current objective (e.g. landing approach), or null. */
+  hint: string | null;
   target: { lat: number; lon: number } | null;
   splits: number[];
 }
@@ -78,11 +118,15 @@ export interface MissionSnapshot {
 export type MissionEvent =
   | { type: 'started'; missionId: string; title: string }
   | { type: 'objectiveCompleted'; missionId: string; index: number; name: string; placeId?: string; fact?: string; split: number; remaining: number }
-  | { type: 'completed'; missionId: string; title: string; time: number; stars: number; splits: number[] }
-  | { type: 'failed'; missionId: string; title: string; reason: 'crashed' | 'timeout' }
+  | { type: 'completed'; missionId: string; title: string; time: number; stars: number; splits: number[]; landing?: LandingReport }
+  | { type: 'failed'; missionId: string; title: string; reason: 'crashed' | 'timeout' | 'hardLanding'; detail?: string }
   | { type: 'aborted'; missionId: string };
 
-export function starsFor(def: MissionDefinition, time: number): number {
+export function starsFor(def: MissionDefinition, time: number, landing?: LandingReport, zoneWidth = 0): number {
+  if (def.scoring === 'landing' && landing) {
+    if (landing.grade === 'Butter' && landing.centerlineOffset <= zoneWidth / 4) return 3;
+    return landing.grade === 'Firm' ? 1 : 2;
+  }
   if (time <= def.par.gold) return 3;
   if (time <= def.par.silver) return 2;
   return 1;

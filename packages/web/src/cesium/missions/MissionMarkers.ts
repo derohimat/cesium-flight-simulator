@@ -2,7 +2,7 @@ import * as Cesium from 'cesium';
 import type { GroundSampler } from '../core/GroundSampler';
 
 export interface MarkerTarget {
-  type: 'reach' | 'ring';
+  type: 'reach' | 'ring' | 'land';
   lat: number;
   lon: number;
   /** Ground height at the target (ellipsoidal metres). */
@@ -10,12 +10,20 @@ export interface MarkerTarget {
   radius: number;
   /** Reach: top of the beacon above ground. Ring: centre above ground. */
   height: number;
-  /** Ring: direction of travel, degrees clockwise from north. */
+  /** Ring / land: direction of travel, degrees clockwise from north. */
   bearing: number;
+  /** Land: zone size, metres. */
+  length?: number;
+  width?: number;
 }
 
 const CURRENT_RING = Cesium.Color.fromCssColorString('#38bdf8');
 const CURRENT_BEACON = Cesium.Color.fromCssColorString('#facc15');
+const CURRENT_ZONE = Cesium.Color.fromCssColorString('#4ade80');
+/** Zone outline sits slightly above the surface so it isn't buried by height differences. */
+const ZONE_LIFT = 3;
+const APPROACH_LIGHTS = 5;
+const APPROACH_LIGHT_SPACING = 400;
 const UPCOMING = Cesium.Color.WHITE.withAlpha(0.35);
 const RING_SEGMENTS = 48;
 const BEACON_MAX_HEIGHT = 1200;
@@ -37,7 +45,9 @@ export class MissionMarkers {
   public show(targets: MarkerTarget[]): void {
     this.clear();
     this.targets = targets;
-    this.lines = targets.map((t) => (t.type === 'ring' ? this.addRing(t) : this.addBeacon(t)));
+    this.lines = targets.map((t) =>
+      t.type === 'ring' ? this.addRing(t) : t.type === 'land' ? this.addLandingZone(t) : this.addBeacon(t)
+    );
     this.setCurrent(0);
   }
 
@@ -51,7 +61,7 @@ export class MissionMarkers {
         const current = i === index;
         line.width = current ? 10 : 6;
         line.material.uniforms.color = current
-          ? target.type === 'ring' ? CURRENT_RING : CURRENT_BEACON
+          ? target.type === 'ring' ? CURRENT_RING : target.type === 'land' ? CURRENT_ZONE : CURRENT_BEACON
           : UPCOMING;
       }
     });
@@ -96,6 +106,33 @@ export class MissionMarkers {
     const center = Cesium.Cartesian3.fromDegrees(t.lon, t.lat, t.ground + ringHeight);
     const zone = this.collection.add({ positions: this.circle(center, t.radius, 0, false), width: 6, material: this.glow() });
     return [beam, zone];
+  }
+
+  /** Zone outline, centreline, and approach lights along the extended centreline. */
+  private addLandingZone(t: MarkerTarget): Cesium.Polyline[] {
+    const center = Cesium.Cartesian3.fromDegrees(t.lon, t.lat, t.ground + ZONE_LIFT);
+    const toWorld = Cesium.Transforms.eastNorthUpToFixedFrame(center);
+    const b = Cesium.Math.toRadians(t.bearing);
+    const along = { x: Math.sin(b), y: Math.cos(b) };
+    const across = { x: Math.cos(b), y: -Math.sin(b) };
+    const at = (a: number, c: number, up = 0) =>
+      Cesium.Matrix4.multiplyByPoint(
+        toWorld,
+        new Cesium.Cartesian3(along.x * a + across.x * c, along.y * a + across.y * c, up),
+        new Cesium.Cartesian3()
+      );
+    const L = (t.length ?? 1000) / 2;
+    const W = (t.width ?? 100) / 2;
+
+    const lines = [
+      this.collection.add({ positions: [at(-L, -W), at(L, -W), at(L, W), at(-L, W), at(-L, -W)], width: 6, material: this.glow() }),
+      this.collection.add({ positions: [at(-L, 0), at(L, 0)], width: 6, material: this.glow() }),
+    ];
+    for (let i = 1; i <= APPROACH_LIGHTS; i++) {
+      const a = -L - i * APPROACH_LIGHT_SPACING;
+      lines.push(this.collection.add({ positions: [at(a, 0), at(a, 0, 30)], width: 6, material: this.glow() }));
+    }
+    return lines;
   }
 
   private circle(center: Cesium.Cartesian3, radius: number, bearingDeg: number, vertical: boolean): Cesium.Cartesian3[] {

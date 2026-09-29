@@ -60,6 +60,56 @@ export const MISSIONS: MissionDefinition[] = [
     timeLimit: 240,
     par: { gold: 75, silver: 110 },
   },
+  {
+    id: 'gbg-landvetter-arrival',
+    title: 'Landvetter Arrival',
+    kind: 'landing',
+    region: 'Gothenburg, Sweden',
+    summary: 'Fly the final approach and land on runway 03.',
+    briefing:
+      'You’re 10 km out on final for Göteborg Landvetter. Follow the approach lights down the 3° glide path, keep below 80 m/s, level the wings and release ↓ just before touchdown. A gentle, centred touchdown earns 3 stars. After landing, hold W to take off again.',
+    start: { lat: 57.5858, lon: 12.1935, agl: 520, bearing: 31, speed: 70 },
+    objectives: [
+      {
+        type: 'land',
+        name: 'Runway 03',
+        lat: 57.6633,
+        lon: 12.2800,
+        bearing: 31,
+        length: 2000,
+        width: 120,
+        surface: 'runway',
+        fact: 'Sweden’s second-busiest airport, opened in 1977.',
+      },
+    ],
+    par: { gold: 240, silver: 360 },
+    scoring: 'landing',
+  },
+  {
+    id: 'nyc-hudson-landing',
+    title: 'Hudson River Landing',
+    kind: 'landing',
+    region: 'New York, USA',
+    summary: 'Set down on the Hudson beside Midtown.',
+    briefing:
+      'From the George Washington Bridge, follow the Hudson downriver and set down on the water beside Midtown Manhattan. Treat the river like a runway: line up with it, keep the wings level and touch down as gently as you can.',
+    start: { lat: 40.8517, lon: -73.9527, agl: 400, bearing: 206, speed: 70 },
+    objectives: [
+      {
+        type: 'land',
+        name: 'Hudson River',
+        lat: 40.7695,
+        lon: -74.0046,
+        bearing: 206,
+        length: 2500,
+        width: 500,
+        surface: 'water',
+        fact: 'On 15 January 2009, US Airways Flight 1549 ditched here — all 155 people aboard survived.',
+      },
+    ],
+    par: { gold: 240, silver: 360 },
+    scoring: 'landing',
+  },
 ];
 
 export function getMission(id: string): MissionDefinition | undefined {
