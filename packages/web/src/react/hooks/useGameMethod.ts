@@ -30,6 +30,8 @@ export function useGameMethod() {
     setAdaptiveQuality: (enabled: boolean) => bridge.setAdaptiveQuality(enabled),
     getPerformanceStats: (): PerformanceStatsData => bridge.getPerformanceStats(),
     getFrameHistory: () => bridge.getFrameHistory(),
+    setCollisionAssist: (enabled: boolean) => bridge.setCollisionAssist(enabled),
+    getCollisionAssist: () => bridge.getCollisionAssist(),
     getMissions: () => bridge.getMissions(),
     startMission: (missionId: string) => bridge.startMission(missionId),
     abortMission: () => bridge.abortMission(),

@@ -13,6 +13,8 @@ export interface VehicleStateData {
   heading: number;
   pitch: number;
   roll: number;
+  /** Auto-GCAS is currently pulling the aircraft away from terrain. */
+  collisionAssistActive: boolean;
   /** Degrees / metres, precomputed so UI code doesn't need Cesium math. */
   longitude: number;
   latitude: number;
@@ -90,6 +92,7 @@ export interface GameEvents {
   modeChanged: ModeChangedData;
   performanceStats: PerformanceStatsData;
   missionState: MissionSnapshot;
+  sceneryLoading: { loading: boolean };
   missionEvent: MissionEvent;
   landmarkNearby: LandmarkNearby;
   [key: string]: unknown;

@@ -82,6 +82,7 @@ export class MissionManager implements FixedUpdatable {
     this.elapsed = 0;
     this.splits = [];
     this.stopAutopilot();
+    this.game.getVehicleManager().cancelTeleport();
 
     // Real ground heights for the start and every target, in one batched request.
     const points = def.objectives.map((o) => this.objectivePosition(o));

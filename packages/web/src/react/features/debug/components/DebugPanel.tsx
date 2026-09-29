@@ -47,8 +47,9 @@ export function DebugPanel() {
 
 /** Mounted only while open, so its subscriptions and polling cost nothing when closed. */
 function DebugPanelContent() {
-  const { toggleCollisionDetection, toggleRoverMode, toggleVehicleType, switchCamera } = useGameMethod();
+  const { toggleCollisionDetection, toggleRoverMode, toggleVehicleType, switchCamera, getCollisionAssist, setCollisionAssist } = useGameMethod();
   const { collisionEnabled, heightLockEnabled, fps } = useDebugInfo();
+  const [collisionAssist, setCollisionAssistState] = useState(getCollisionAssist);
   const { config, adaptive, setAdaptive, updateSetting, applyPreset } = useQualitySettings();
 
   return (
@@ -86,6 +87,19 @@ function DebugPanelContent() {
               className="w-full"
             >
               📷 Switch Camera (C)
+            </Button>
+
+            <Button
+              onClick={() => {
+                setCollisionAssist(!collisionAssist);
+                setCollisionAssistState(!collisionAssist);
+              }}
+              variant={collisionAssist ? 'primary' : 'secondary'}
+              size="sm"
+              className="w-full"
+              title="Automatic ground-collision avoidance: pulls up when terrain is ahead"
+            >
+              🛟 Collision Assist {collisionAssist ? 'On' : 'Off'}
             </Button>
 
             <Button

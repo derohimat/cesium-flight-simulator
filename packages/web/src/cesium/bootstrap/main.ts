@@ -36,7 +36,7 @@ export class CesiumVehicleGame {
     this.groundSampler = new GroundSampler(this.scene.scene);
     this.performanceGovernor = new PerformanceGovernor(this.scene);
     this.terrainHeights = new TerrainHeights();
-    this.vehicleManager = new VehicleManager(this.scene, this.groundSampler);
+    this.vehicleManager = new VehicleManager(this.scene, this.groundSampler, this.terrainHeights);
     this.cameraManager = new CameraManager(this.scene.camera);
     this.inputManager = new InputManager();
     this.objectManager = new ObjectManager(this.scene.viewer);

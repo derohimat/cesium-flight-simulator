@@ -126,6 +126,7 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
       heading: state.heading,
       pitch: state.pitch,
       roll: state.roll,
+      collisionAssistActive: vehicle instanceof Aircraft && vehicle.isCollisionAssistActive(),
       longitude: carto ? Cesium.Math.toDegrees(carto.longitude) : 0,
       latitude: carto ? Cesium.Math.toDegrees(carto.latitude) : 0,
       altitude: carto ? carto.height : 0,
@@ -276,26 +277,28 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
     };
   }
 
-  public teleportTo(longitude: number, latitude: number, altitude: number, heading: number = 0): void {
-    const vehicle = this.game.getVehicleManager().getActiveVehicle();
-    if (vehicle) {
-      const newPosition = Cesium.Cartesian3.fromDegrees(longitude, latitude, altitude);
-      const currentState = vehicle.getState();
-      vehicle.setState({
-        ...currentState,
-        position: newPosition,
-        heading: Cesium.Math.toRadians(heading),
-        pitch: 0,
-        roll: 0,
-        velocity: 0,
-        speed: 0
-      });
-      this.emit('locationChanged', {
-        longitude,
-        latitude,
-        altitude
-      });
-    }
+  public teleportTo(longitude: number, latitude: number, altitude: number, heading: number = 0): Promise<void> {
+    // A jump away mid-mission would skip objectives; end the mission instead.
+    if (this.game.getMissionManager().isRunning()) this.abortMission();
+
+    const cameras = this.game.getCameraManager();
+    const arrival = this.game.getVehicleManager().teleport(longitude, latitude, altitude, Cesium.Math.toRadians(heading), {
+      onPlaced: () => {
+        // Snap behind the aircraft instead of easing across the planet (unless autopilot owns the view).
+        if (!cameras.isSuspended()) cameras.setActiveCamera(cameras.getActiveCameraType());
+      },
+      onLoading: (loading) => this.emit('sceneryLoading', { loading }),
+    });
+    this.emit('locationChanged', { longitude, latitude, altitude });
+    return arrival;
+  }
+
+  public setCollisionAssist(enabled: boolean): void {
+    this.game.getVehicleManager().setCollisionAssist(enabled);
+  }
+
+  public getCollisionAssist(): boolean {
+    return this.game.getVehicleManager().getCollisionAssist();
   }
 
   public restart(): void {

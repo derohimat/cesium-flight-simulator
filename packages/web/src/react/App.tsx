@@ -14,6 +14,7 @@ import { RecordingStatus } from './features/hud/components/RecordingStatus';
 import { MissionHUD } from './features/missions/components/MissionHUD';
 import { MissionResult } from './features/missions/components/MissionResult';
 import { LandmarkCard } from './features/missions/components/LandmarkCard';
+import { FlightAssistOverlay } from './features/hud/components/FlightAssistOverlay';
 
 export function App() {
   const { mode } = useGameMode();
@@ -49,6 +50,7 @@ export function App() {
       {/* Missions & location info */}
       <MissionHUD />
       <LandmarkCard />
+      <FlightAssistOverlay />
 
       {/* Overlays */}
       <CrashScreen />
