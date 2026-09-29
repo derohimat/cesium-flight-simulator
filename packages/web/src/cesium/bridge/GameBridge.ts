@@ -9,10 +9,15 @@ import { Aircraft } from '../vehicles/aircraft/Aircraft';
 import type { Vehicle } from '../vehicles/Vehicle';
 import { ModeManager } from '../modes/ModeManager';
 import type { FrameHook } from '../core/GameLoop';
+import { LandmarkWatcher } from '../missions/LandmarkWatcher';
+import { MISSIONS } from '../missions/missions';
+import type { MissionDefinition, MissionSnapshot } from '../missions/types';
 
 /** UI refresh rates. Faster only burns main-thread time the renderer needs. */
 const VEHICLE_STATE_INTERVAL_MS = 1000 / 30;
 const CAMERA_STATE_INTERVAL_MS = 100;
+const MISSION_STATE_INTERVAL_MS = 100;
+const LANDMARK_CHECK_INTERVAL_MS = 1000;
 const PERFORMANCE_STATS_INTERVAL_MS = 250;
 
 export class GameBridge extends TypedEventEmitter<GameEvents> {
@@ -23,6 +28,9 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
   private lastVehicleEmit = 0;
   private lastStatsEmit = 0;
   private lastCameraEmit = 0;
+  private lastMissionEmit = 0;
+  private lastLandmarkCheck = 0;
+  private landmarks = new LandmarkWatcher();
   private lastCrashed = false;
   private static readonly scratchCartographic = new Cesium.Cartographic();
   private static readonly scratchCameraCartographic = new Cesium.Cartographic();
@@ -35,6 +43,13 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
     // was drawn, and a timer can't wake up in the middle of a frame.
     this.frameHook = { onFrameEnd: (_start, end) => this.onFrameEnd(end) };
     this.game.getGameLoop().addFrameHook(this.frameHook);
+    this.game.getMissionManager().onEvent((event) => {
+      if (event.type === 'objectiveCompleted' && event.placeId) {
+        this.landmarks.markShown(event.placeId, performance.now());
+      }
+      this.emit('missionEvent', event);
+      this.emit('missionState', this.game.getMissionManager().getSnapshot());
+    });
     this.setupVehicleChangeListener();
     this.setupBuilderModeListener();
     this.applyQualityPreset('performance');
@@ -64,6 +79,15 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
       this.lastCameraEmit = now;
       this.emit('cameraPositionChanged', this.getCurrentCameraPosition());
     }
+    const missions = this.game.getMissionManager();
+    if (now - this.lastMissionEmit >= MISSION_STATE_INTERVAL_MS && missions.getStatus() !== 'idle') {
+      this.lastMissionEmit = now;
+      this.emit('missionState', missions.getSnapshot());
+    }
+    if (now - this.lastLandmarkCheck >= LANDMARK_CHECK_INTERVAL_MS && !missions.isRunning()) {
+      this.lastLandmarkCheck = now;
+      this.checkLandmarks(now);
+    }
     if (now - this.lastStatsEmit >= PERFORMANCE_STATS_INTERVAL_MS && this.listenerCount('performanceStats') > 0) {
       this.lastStatsEmit = now;
       this.emit('performanceStats', this.getPerformanceStats());
@@ -77,9 +101,12 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
       this.emit('vehicleStateChanged', this.toVehicleStateData(vehicle));
 
       // Only on transitions; re-sending while crashed re-rendered the crash screen every tick.
-      const crashed = vehicle instanceof Aircraft && vehicle.isCrashed();
-      if (crashed && !this.lastCrashed) {
-        this.emit('crashed', { crashed: true });
+      // During a mission the crash is the mission's (its result screen handles it).
+      const crashed =
+        vehicle instanceof Aircraft && vehicle.isCrashed() && !this.game.getMissionManager().isRunning() &&
+        this.game.getMissionManager().getStatus() !== 'failed';
+      if (crashed !== this.lastCrashed) {
+        this.emit('crashed', { crashed });
       }
       this.lastCrashed = crashed;
     }
@@ -103,6 +130,40 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
       latitude: carto ? Cesium.Math.toDegrees(carto.latitude) : 0,
       altitude: carto ? carto.height : 0,
     };
+  }
+
+  private checkLandmarks(now: number): void {
+    if (this.listenerCount('landmarkNearby') === 0) return;
+    const state = this.getVehicleState();
+    if (!state) return;
+    const nearby = this.landmarks.check(state.latitude, state.longitude, now);
+    if (nearby) this.emit('landmarkNearby', nearby);
+  }
+
+  // --- Missions ---------------------------------------------------------------------------
+
+  public getMissions(): MissionDefinition[] {
+    return MISSIONS;
+  }
+
+  public startMission(missionId: string): Promise<void> {
+    return this.game.getMissionManager().start(missionId);
+  }
+
+  public abortMission(): void {
+    this.game.getMissionManager().abort();
+    this.emit('missionState', this.game.getMissionManager().getSnapshot());
+  }
+
+  /** Close the result screen; a crashed aircraft continues from its crash site. */
+  public dismissMission(): void {
+    this.game.getMissionManager().dismiss();
+    this.game.getVehicleManager().recoverFromCrash();
+    this.emit('missionState', this.game.getMissionManager().getSnapshot());
+  }
+
+  public getMissionState(): MissionSnapshot {
+    return this.game.getMissionManager().getSnapshot();
   }
 
   public getPerformanceStats(): PerformanceStatsData {
@@ -238,24 +299,10 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
   }
 
   public restart(): void {
-    const vehicle = this.game.getVehicleManager().getActiveVehicle();
-    if (vehicle && vehicle instanceof Aircraft && vehicle.isCrashed()) {
-      vehicle.resetCrash();
-      // Reset to spawn position
-      const spawnPosition = Cesium.Cartesian3.fromDegrees(11.9746, 57.7089, 200);
-      const currentState = vehicle.getState();
-      vehicle.setState({
-        ...currentState,
-        position: spawnPosition,
-        heading: 0,
-        pitch: 0,
-        roll: 0,
-        velocity: 0,
-        speed: 0
-      });
-      this.emit('crashed', { crashed: false });
-    }
+    // Continue from the crash site (the crashed=false event follows from emitVehicleState).
+    this.game.getVehicleManager().recoverFromCrash();
   }
+
 
   public destroy(): void {
     this.game.getGameLoop().removeFrameHook(this.frameHook);
@@ -285,6 +332,9 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
       return;
     }
     
+    // Builder mode takes over the camera and freezes physics; a mission can't continue.
+    if (mode === 'builder') this.abortMission();
+
     const previousMode = this.currentMode;
     this.currentMode = mode;
     

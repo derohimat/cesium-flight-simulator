@@ -7,6 +7,10 @@ import { FixedUpdatable } from '../core/GameLoop';
 import type { GroundSampler } from '../core/GroundSampler';
 import { InputManager } from '../input/InputManager';
 
+/** After a crash, resume this far above the highest surface at and just ahead of the wreck. */
+const RECOVERY_CLEARANCE = 120;
+const RECOVERY_LOOKAHEAD = [0, 150, 300];
+
 const DEFAULT_SPAWN_LOCATION = {
   lng: 11.9746,
   lat: 57.7089
@@ -201,9 +205,37 @@ export class VehicleManager implements FixedUpdatable {
     }
   }
 
+  /**
+   * Continue a crashed aircraft from where it crashed: same heading, level flight at minimum
+   * speed, lifted clear of whatever it hit (the surface at the crash point and 150/300 m ahead,
+   * buildings included). Returns false if there is no crashed aircraft.
+   */
+  public recoverFromCrash(): boolean {
+    const aircraft = this.activeVehicle;
+    if (!(aircraft instanceof Aircraft) || !aircraft.isCrashed()) return false;
+
+    const position = aircraft.getSimulationPosition(new Cesium.Cartesian3());
+    const here = Cesium.Cartographic.fromCartesian(position);
+    const exclude = aircraft.getPrimitiveForQueries();
+    let top = here.height;
+    for (const distance of RECOVERY_LOOKAHEAD) {
+      const point = distance === 0 ? position : aircraft.getPointAhead(distance, new Cesium.Cartesian3());
+      const ground = this.groundSampler.sampleHeightNow(Cesium.Cartographic.fromCartesian(point), exclude);
+      if (ground !== undefined) top = Math.max(top, ground);
+    }
+
+    const resume = Cesium.Cartesian3.fromRadians(here.longitude, here.latitude, top + RECOVERY_CLEARANCE);
+    aircraft.resetFlight(resume, aircraft.getHeading(), aircraft.getMinSpeed());
+    console.log(`✈️ Recovered at crash site, ${Math.round(top + RECOVERY_CLEARANCE - here.height)} m higher`);
+    return true;
+  }
+
   public async restartCurrentVehicle(): Promise<void> {
     const active = this.activeVehicle;
     if (!active) return;
+
+    // After a crash, "restart" continues from the crash site instead of the spawn point.
+    if (this.recoverFromCrash()) return;
 
     const isAircraft = active instanceof Aircraft;
     const originalSpawn = Cesium.Cartesian3.fromDegrees(

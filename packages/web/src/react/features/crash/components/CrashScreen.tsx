@@ -47,7 +47,7 @@ export function CrashScreen() {
               Crashed
             </h2>
             <p className="text-white/50 text-sm">
-              Don't worry, happens to the best pilots
+              Don't worry, happens to the best pilots. You'll resume right where you went down.
             </p>
           </div>
 
@@ -58,11 +58,11 @@ export function CrashScreen() {
               size="lg"
               className="w-full"
             >
-              Restart Flight
+              Continue Flight
             </Button>
             
             <div className="text-[10px] text-white/30">
-              Press <kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-white/50 font-mono text-[10px]">R</kbd> to restart
+              Press <kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-white/50 font-mono text-[10px]">R</kbd> to continue
             </div>
           </div>
         </div>

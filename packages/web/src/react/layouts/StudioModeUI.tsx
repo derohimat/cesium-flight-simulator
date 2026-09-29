@@ -3,11 +3,12 @@ import { DirectorPanel } from '../features/director/components/DirectorPanel';
 import { CameraControls } from '../features/camera/components/CameraControls';
 import { LocationLibrary } from '../features/studio/components/LocationLibrary';
 import { ExportPanel } from '../features/studio/components/ExportPanel';
+import { MissionsPanel } from '../features/missions/components/MissionsPanel';
 import { useGameMethod } from '../hooks/useGameMethod';
 import type { Location } from '../features/studio/components/LocationLibrary';
 
 export function StudioModeUI() {
-  const [activePanel, setActivePanel] = useState<'director' | 'locations' | 'export'>('director');
+  const [activePanel, setActivePanel] = useState<'director' | 'missions' | 'locations' | 'export'>('director');
   const [isRecording, setIsRecording] = useState(false);
   const { 
     teleportTo, 
@@ -58,6 +59,12 @@ export function StudioModeUI() {
             isActive={activePanel === 'director'} 
             onClick={() => setActivePanel('director')} 
           />
+          <PanelTab
+            icon="🏁"
+            label="Missions"
+            isActive={activePanel === 'missions'}
+            onClick={() => setActivePanel('missions')}
+          />
           <PanelTab 
             icon="📍" 
             label="Locations" 
@@ -81,6 +88,7 @@ export function StudioModeUI() {
       {/* Active Panel - Left Side */}
       <div className="fixed top-20 left-4 z-50 pointer-events-auto max-h-[calc(100vh-140px)] overflow-y-auto">
         {activePanel === 'director' && <DirectorPanel />}
+        {activePanel === 'missions' && <MissionsPanel />}
         {activePanel === 'locations' && (
           <LocationLibrary 
             onSelectLocation={handleSelectLocation}

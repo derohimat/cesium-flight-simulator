@@ -213,6 +213,48 @@ export class Aircraft extends Vehicle {
     this.nextForwardProbeAt = this.simTime;
   }
 
+  /**
+   * Put the aircraft in level flight at `position`, on `heading` (vehicle frame: 0 = east,
+   * i.e. compass bearing − 90°), at `speed`. Clears a crash and the interpolation history.
+   * Unlike setState, this also resets the flight model, which otherwise keeps its own heading
+   * and speed and overrides them on the next step.
+   */
+  public resetFlight(position: Cesium.Cartesian3, heading: number, speed: number): void {
+    this.physics.reset(heading, speed);
+    Cesium.Cartesian3.clone(position, this.position);
+    this.hpRoll.heading = heading;
+    this.hpRoll.pitch = 0;
+    this.hpRoll.roll = 0;
+    this.velocity = this.speed = Math.max(speed, this.physics.getMinSpeed());
+    Cesium.Cartesian3.clone(Cesium.Cartesian3.ZERO, this.lastStepDelta);
+    this.resetCrash();
+    this.snapToSimulation();
+  }
+
+  public getMinSpeed(): number {
+    return this.physics.getMinSpeed();
+  }
+
+  /** Point `distance` metres ahead along the current heading (horizontal), for clearance checks. */
+  public getPointAhead(distance: number, result: Cesium.Cartesian3): Cesium.Cartesian3 {
+    Cesium.Transforms.eastNorthUpToFixedFrame(this.position, undefined, Aircraft.scratchTransform);
+    const local = new Cesium.Cartesian3(
+      Math.cos(this.hpRoll.heading) * distance,
+      -Math.sin(this.hpRoll.heading) * distance,
+      0
+    );
+    return Cesium.Matrix4.multiplyByPoint(Aircraft.scratchTransform, local, result);
+  }
+
+  /** Exclusion list for height queries around this aircraft. */
+  public getPrimitiveForQueries(): object[] {
+    return this.primitive ? [this.primitive] : [];
+  }
+
+  public getHeading(): number {
+    return this.hpRoll.heading;
+  }
+
   public setInput(input: Partial<AircraftInput>): void {
     Object.assign(this.input, input);
   }

@@ -3,6 +3,7 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { getTokens } from '../../../../utils/tokenValidator';
 import { useCameraPosition } from '../../../hooks/useCameraPosition';
+import { useMission } from '../../missions/hooks/useMission';
 import { cn } from '../../../shared/utils/cn';
 
 export interface MiniMapProps {
@@ -14,6 +15,8 @@ export function MiniMap({ className }: MiniMapProps) {
   const map = useRef<mapboxgl.Map | null>(null);
   const marker = useRef<mapboxgl.Marker | null>(null);
   const cameraPosition = useCameraPosition();
+  const mission = useMission();
+  const targetMarker = useRef<mapboxgl.Marker | null>(null);
   const [isReady, setIsReady] = useState(false);
   const tokens = getTokens();
 
@@ -77,6 +80,25 @@ export function MiniMap({ className }: MiniMapProps) {
     map.current.setBearing(heading);
 
   }, [cameraPosition, isReady]);
+
+  // Current mission objective
+  const target = mission.status === 'active' || mission.status === 'countdown' ? mission.target : null;
+  const targetLng = target?.lon;
+  const targetLat = target?.lat;
+  useEffect(() => {
+    if (!map.current || !isReady) return;
+    if (targetLng === undefined || targetLat === undefined) {
+      targetMarker.current?.remove();
+      targetMarker.current = null;
+      return;
+    }
+    if (!targetMarker.current) {
+      const el = document.createElement('div');
+      el.className = 'w-3.5 h-3.5 rounded-full bg-yellow-400 border-2 border-white shadow-[0_0_10px_rgba(250,204,21,0.9)]';
+      targetMarker.current = new mapboxgl.Marker(el);
+    }
+    targetMarker.current.setLngLat([targetLng, targetLat]).addTo(map.current);
+  }, [targetLng, targetLat, isReady]);
 
   if (!tokens.mapbox) return null;
 

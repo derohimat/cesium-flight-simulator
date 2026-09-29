@@ -218,6 +218,28 @@ export class Scene {
     }
   }
 
+  /**
+   * Resolve once the photoreal tiles for the current view have streamed in (a few consecutive
+   * frames with nothing pending), or after `timeoutMs`. Used before starting a mission so it
+   * doesn't open over half-loaded scenery.
+   */
+  public waitForTiles(timeoutMs: number): Promise<void> {
+    const tileset = this.tileset;
+    if (!tileset) return Promise.resolve();
+    return new Promise((resolve) => {
+      const started = performance.now();
+      let settledFrames = 0;
+      const remove = this.scene.postRender.addEventListener(() => {
+        const elapsed = performance.now() - started;
+        settledFrames = tileset.tilesLoaded ? settledFrames + 1 : 0;
+        if ((settledFrames >= 3 && elapsed > 300) || elapsed > timeoutMs) {
+          remove();
+          resolve();
+        }
+      });
+    });
+  }
+
   // --- Runtime performance knobs (driven by PerformanceGovernor) --------------------------
 
   private applyScreenSpaceError(): void {
