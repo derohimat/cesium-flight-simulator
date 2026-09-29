@@ -1,6 +1,8 @@
 import * as Cesium from 'cesium';
 import { Scene } from '../core/Scene';
 import { GameLoop } from '../core/GameLoop';
+import { GroundSampler } from '../core/GroundSampler';
+import { PerformanceGovernor } from '../core/PerformanceGovernor';
 import { VehicleManager } from '../managers/VehicleManager';
 import { CameraManager } from '../managers/CameraManager';
 import { InputManager } from '../input/InputManager';
@@ -13,6 +15,8 @@ import { RecordingManager } from '../managers/RecordingManager';
 export class CesiumVehicleGame {
   private scene: Scene;
   private gameLoop: GameLoop;
+  private groundSampler: GroundSampler;
+  private performanceGovernor: PerformanceGovernor;
   private vehicleManager: VehicleManager;
   private cameraManager: CameraManager;
   private inputManager: InputManager;
@@ -25,7 +29,9 @@ export class CesiumVehicleGame {
   constructor(containerId: string = "cesiumContainer") {
     this.scene = new Scene(containerId);
     this.gameLoop = new GameLoop(this.scene);
-    this.vehicleManager = new VehicleManager(this.scene);
+    this.groundSampler = new GroundSampler(this.scene.scene);
+    this.performanceGovernor = new PerformanceGovernor(this.scene);
+    this.vehicleManager = new VehicleManager(this.scene, this.groundSampler);
     this.cameraManager = new CameraManager(this.scene.camera);
     this.inputManager = new InputManager();
     this.objectManager = new ObjectManager(this.scene.viewer);
@@ -39,7 +45,10 @@ export class CesiumVehicleGame {
   }
 
   private setupSystems(): void {
-    this.gameLoop.addUpdatable(this.vehicleManager);
+    this.gameLoop.addFrameHook(this.groundSampler);
+    this.gameLoop.addFrameHook(this.performanceGovernor);
+    // Fixed-rate physics, then per-frame systems that read the interpolated vehicle pose.
+    this.gameLoop.addFixedUpdatable(this.vehicleManager);
     this.gameLoop.addUpdatable(this.cameraManager);
     this.gameLoop.addUpdatable({
       update: (deltaTime: number) => {
@@ -148,6 +157,18 @@ export class CesiumVehicleGame {
 
   public getScene(): Scene {
     return this.scene;
+  }
+
+  public getGameLoop(): GameLoop {
+    return this.gameLoop;
+  }
+
+  public getGroundSampler(): GroundSampler {
+    return this.groundSampler;
+  }
+
+  public getPerformanceGovernor(): PerformanceGovernor {
+    return this.performanceGovernor;
   }
 
   public getObjectManager(): ObjectManager {

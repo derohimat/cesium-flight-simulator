@@ -6,10 +6,11 @@ export function useDebugInfo() {
   const { getCollisionDetection, getRoverMode } = useGameMethod();
   const [collisionEnabled, setCollisionEnabled] = useState(getCollisionDetection());
   const [heightLockEnabled, setHeightLockEnabled] = useState(getRoverMode());
-  const [fps, setFps] = useState(0);
 
   const collisionData = useGameEvent('collisionDetectionChanged');
   const roverModeData = useGameEvent('roverModeChanged');
+  // Measured by the engine's PerformanceGovernor rather than a separate rAF loop here.
+  const stats = useGameEvent('performanceStats');
 
   useEffect(() => {
     if (collisionData !== null) {
@@ -23,28 +24,5 @@ export function useDebugInfo() {
     }
   }, [roverModeData]);
 
-  useEffect(() => {
-    let lastTime = performance.now();
-    let frames = 0;
-
-    const measureFps = () => {
-      frames++;
-      const currentTime = performance.now();
-      if (currentTime >= lastTime + 1000) {
-        setFps(Math.round((frames * 1000) / (currentTime - lastTime)));
-        frames = 0;
-        lastTime = currentTime;
-      }
-      requestAnimationFrame(measureFps);
-    };
-
-    const rafId = requestAnimationFrame(measureFps);
-    return () => cancelAnimationFrame(rafId);
-  }, []);
-
-  return { collisionEnabled, heightLockEnabled, fps };
+  return { collisionEnabled, heightLockEnabled, fps: stats ? Math.round(stats.fps) : 0 };
 }
-
-
-
-

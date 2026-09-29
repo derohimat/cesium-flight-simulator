@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium';
 import type { CameraType } from '../managers/CameraManager';
+import type { PerformanceSnapshot } from '../core/PerformanceGovernor';
 
 export type GameMode = 'play' | 'builder';
 
@@ -10,6 +11,10 @@ export interface VehicleStateData {
   heading: number;
   pitch: number;
   roll: number;
+  /** Degrees / metres, precomputed so UI code doesn't need Cesium math. */
+  longitude: number;
+  latitude: number;
+  altitude: number;
 }
 
 export interface CameraStateData {
@@ -65,6 +70,11 @@ export interface ModeChangedData {
   previousMode: GameMode;
 }
 
+export interface PerformanceStatsData extends PerformanceSnapshot {
+  groundQueriesPerSecond: number;
+  physicsStepsLastFrame: number;
+}
+
 export interface GameEvents {
   gameReady: GameReadyData;
   vehicleStateChanged: VehicleStateData;
@@ -76,6 +86,7 @@ export interface GameEvents {
   locationChanged: LocationChangedData;
   crashed: CrashData;
   modeChanged: ModeChangedData;
+  performanceStats: PerformanceStatsData;
   [key: string]: unknown;
 }
 

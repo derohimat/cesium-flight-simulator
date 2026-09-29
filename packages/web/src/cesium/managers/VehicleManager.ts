@@ -3,7 +3,8 @@ import { Vehicle } from '../vehicles/Vehicle';
 import { Car } from '../vehicles/car/Car';
 import { Aircraft } from '../vehicles/aircraft/Aircraft';
 import { Scene } from '../core/Scene';
-import { Updatable } from '../core/GameLoop';
+import { FixedUpdatable } from '../core/GameLoop';
+import type { GroundSampler } from '../core/GroundSampler';
 import { InputManager } from '../input/InputManager';
 
 const DEFAULT_SPAWN_LOCATION = {
@@ -11,14 +12,14 @@ const DEFAULT_SPAWN_LOCATION = {
   lat: 57.7089
 };
 
-export class VehicleManager implements Updatable {
+export class VehicleManager implements FixedUpdatable {
   private vehicles: Map<string, Vehicle> = new Map();
   private activeVehicle: Vehicle | null = null;
   private scene: Scene;
   private onVehicleChangeCallback: ((vehicle: Vehicle) => void) | null = null;
   private onVehicleChangeCallbacks: Array<(vehicle: Vehicle) => void> = [];
 
-  constructor(scene: Scene) {
+  constructor(scene: Scene, private groundSampler: GroundSampler) {
     this.scene = scene;
   }
 
@@ -29,7 +30,7 @@ export class VehicleManager implements Updatable {
         this.removeVehicle(this.activeVehicle.id);
       }
 
-      await vehicle.initialize(this.scene.scene);
+      await vehicle.initialize(this.scene.scene, this.groundSampler);
       this.vehicles.set(vehicle.id, vehicle);
       
       this.waitForVehicleReady(vehicle.id);
@@ -103,10 +104,15 @@ export class VehicleManager implements Updatable {
     return this.vehicles.size;
   }
 
-  public update(deltaTime: number): void {
-    // Update all vehicles
+  public fixedUpdate(fixedDeltaTime: number): void {
     for (const vehicle of this.vehicles.values()) {
-      vehicle.update(deltaTime);
+      vehicle.fixedUpdate(fixedDeltaTime);
+    }
+  }
+
+  public interpolate(alpha: number): void {
+    for (const vehicle of this.vehicles.values()) {
+      vehicle.interpolate(alpha);
     }
   }
 

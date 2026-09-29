@@ -168,25 +168,29 @@ export function DirectorPanel() {
     setWaypoints([]);
   }, []);
 
-  const handleAutoAltitude = useCallback(() => {
+  /** Resolves to the chosen altitude (null if unavailable), so callers needn't wait for state. */
+  const handleAutoAltitude = useCallback(async (): Promise<number | null> => {
     if (waypoints.length > 0) {
-      const autoAlt = calculateAutoAltitudeForPath(waypoints);
+      const wp = waypoints[0];
+      const [autoAlt, result] = await Promise.all([
+        calculateAutoAltitudeForPath(waypoints),
+        calculateAutoAltitude(wp.lon, wp.lat),
+      ]);
       if (autoAlt) {
         setFlightAltitude(autoAlt);
         setAutoAltitudeMode(true);
-        const wp = waypoints[0];
-        const result = calculateAutoAltitude(wp.lon, wp.lat);
         if (result) setSceneType(result.sceneType);
       }
-    } else {
-      const pos = getCurrentCameraPosition();
-      const result = calculateAutoAltitude(pos.longitude, pos.latitude);
-      if (result) {
-        setFlightAltitude(result.altitude);
-        setAutoAltitudeMode(true);
-        setSceneType(result.sceneType);
-      }
+      return autoAlt;
     }
+    const pos = getCurrentCameraPosition();
+    const result = await calculateAutoAltitude(pos.longitude, pos.latitude);
+    if (result) {
+      setFlightAltitude(result.altitude);
+      setAutoAltitudeMode(true);
+      setSceneType(result.sceneType);
+    }
+    return result?.altitude ?? null;
   }, [waypoints, calculateAutoAltitude, calculateAutoAltitudeForPath, getCurrentCameraPosition]);
 
   const handleStartFlight = async () => {
@@ -199,27 +203,30 @@ export function DirectorPanel() {
     const currentPos = getCurrentCameraPosition();
     const startPoint = { lat: currentPos.latitude, lon: currentPos.longitude, name: 'Start' };
 
-    if (autoRecord) {
-      startRecording();
-      setIsRecording(true);
-    }
-
+    // Auto-adjust altitude for safety before starting flight. Use the returned value: the
+    // state update from handleAutoAltitude isn't visible until the next render.
+    let altitude = flightAltitude;
     try {
-      // Auto-adjust altitude for safety before starting flight
       if (!autoAltitudeMode) {
-        handleAutoAltitude();
+        altitude = (await handleAutoAltitude()) ?? flightAltitude;
+      }
+
+      // Start recording once planning is done, so the video doesn't open on a terrain lookup.
+      if (autoRecord) {
+        startRecording();
+        setIsRecording(true);
       }
 
       if (flightMode === 'linear') {
         const entryPoint = waypoints[0];
-        teleportTo(entryPoint.lon, entryPoint.lat, flightAltitude);
+        teleportTo(entryPoint.lon, entryPoint.lat, altitude);
         await new Promise(resolve => setTimeout(resolve, 500));
-        await flyPath(waypoints.map(wp => ({ lat: wp.lat, lon: wp.lon })), { speed: flightSpeed, altitude: flightAltitude });
+        await flyPath(waypoints.map(wp => ({ lat: wp.lat, lon: wp.lon })), { speed: flightSpeed, altitude });
       } else if (flightMode === 'orbit') {
         const target = waypoints[waypoints.length - 1];
-        startOrbit(target.lat, target.lon, flightAltitude, orbitRadius, 0.2, () => {
+        startOrbit(target.lat, target.lon, altitude, orbitRadius, 0.2, () => {
           if (autoRecord) {
-            const filename = `arrival-${target.name.replace(/\s+/g, '-')}-${flightAltitude}m-orbit.mp4`;
+            const filename = `arrival-${target.name.replace(/\s+/g, '-')}-${altitude}m-orbit.mp4`;
              stopRec(filename);
              setIsRecording(false);
            }
@@ -235,7 +242,7 @@ export function DirectorPanel() {
 
     if (flightMode === 'linear' && autoRecord) {
       const target = waypoints[waypoints.length - 1];
-      const filename = `arrival-${target.name.replace(/\s+/g, '-')}-${flightAltitude}m-${flightSpeed}ms.mp4`;
+      const filename = `arrival-${target.name.replace(/\s+/g, '-')}-${altitude}m-${flightSpeed}ms.mp4`;
       stopRec(filename);
       setIsRecording(false);
     }

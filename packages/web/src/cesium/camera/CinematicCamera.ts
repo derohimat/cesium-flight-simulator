@@ -1,5 +1,5 @@
 import * as Cesium from 'cesium';
-import { Camera } from './Camera';
+import { Camera, damp } from './Camera';
 
 /**
  * CinematicCamera - Designed for creating smooth, professional aerial shots
@@ -11,6 +11,9 @@ import { Camera } from './Camera';
  * - Focus pulling between subjects
  */
 export class CinematicCamera extends Camera {
+    private static readonly scratchDirection = new Cesium.Cartesian3();
+    private static readonly scratchUp = new Cesium.Cartesian3();
+
     // Camera position and target
     private currentPosition: Cesium.Cartesian3 = Cesium.Cartesian3.ZERO.clone();
     private lookAtPosition: Cesium.Cartesian3 = Cesium.Cartesian3.ZERO.clone();
@@ -87,7 +90,7 @@ export class CinematicCamera extends Camera {
         Cesium.Cartesian3.lerp(
             this.currentPosition,
             this.targetPosition,
-            this.positionLerpFactor,
+            damp(this.positionLerpFactor, deltaTime),
             this.currentPosition
         );
 
@@ -98,11 +101,13 @@ export class CinematicCamera extends Camera {
         const direction = Cesium.Cartesian3.subtract(
             this.lookAtPosition,
             this.currentPosition,
-            new Cesium.Cartesian3()
+            CinematicCamera.scratchDirection
         );
         Cesium.Cartesian3.normalize(direction, direction);
 
-        const up = Cesium.Cartesian3.UNIT_Z;
+        // Local vertical. UNIT_Z is the Earth's polar axis, which tilted the horizon by an
+        // amount that depended on latitude and heading.
+        const up = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(this.currentPosition, CinematicCamera.scratchUp);
 
         this.cesiumCamera.setView({
             destination: this.currentPosition,
@@ -134,17 +139,18 @@ export class CinematicCamera extends Camera {
         this.targetPosition = Cesium.Cartographic.toCartesian(offsetCartographic);
     }
 
-    private updateLookAt(_deltaTime: number): void {
+    private updateLookAt(deltaTime: number): void {
+        // Copy, don't alias: getPosition() returns a shared scratch vector.
         if (this.focusSubject === 'vehicle' && this.target) {
-            this.targetLookAt = this.target.getPosition();
+            Cesium.Cartesian3.clone(this.target.getPosition(), this.targetLookAt);
         } else if (this.focusSubject === 'point' && this.focusPoint) {
-            this.targetLookAt = this.focusPoint;
+            Cesium.Cartesian3.clone(this.focusPoint, this.targetLookAt);
         }
 
         Cesium.Cartesian3.lerp(
             this.lookAtPosition,
             this.targetLookAt,
-            this.lookAtLerpFactor,
+            damp(this.lookAtLerpFactor, deltaTime),
             this.lookAtPosition
         );
     }
@@ -170,14 +176,11 @@ export class CinematicCamera extends Camera {
             t
         );
 
-        // Update FOV
-        const currentFrustum = this.cesiumCamera.frustum as Cesium.PerspectiveFrustum;
-        this.cesiumCamera.frustum = new Cesium.PerspectiveFrustum({
-            fov: Cesium.Math.toRadians(currentFov),
-            aspectRatio: currentFrustum.aspectRatio || 1.7777,
-            near: 1.0,
-            far: 5000000.0
-        });
+        // Update FOV in place (a new frustum every frame was pure allocation churn)
+        const frustum = this.cesiumCamera.frustum;
+        if (frustum instanceof Cesium.PerspectiveFrustum) {
+            frustum.fov = Cesium.Math.toRadians(currentFov);
+        }
 
         // Update distance from target
         if (this.target) {

@@ -1,5 +1,6 @@
 import { IntroScreen } from './shared/components/IntroScreen';
 import { DebugPanel } from './features/debug/components/DebugPanel';
+import { PerfOverlay } from './features/debug/components/PerfOverlay';
 import { StudioModeUI } from './layouts/StudioModeUI';
 import { BuilderModeUI } from './layouts/BuilderModeUI';
 import { ModeToggle } from './features/builder/components/ModeToggle';
@@ -25,6 +26,7 @@ export function App() {
       {/* Global UI - always visible */}
       <IntroScreen />
       <DebugPanel />
+      <PerfOverlay />
       
       {/* Mode toggle button */}
       <div className="fixed bottom-4 right-4 z-50 pointer-events-auto">

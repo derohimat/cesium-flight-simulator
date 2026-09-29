@@ -15,8 +15,11 @@
 }
 
 @layer components {
+  /* Backdrop blur over the WebGL canvas is re-computed by the compositor every frame (the
+     canvas under it changes every frame) and its cost grows with the radius. 24px reads the
+     same as the old 40px on a 60%-black panel at a fraction of the GPU time. */
   .glass-panel {
-    @apply bg-black/60 backdrop-blur-2xl border border-white/20 rounded-xl;
+    @apply bg-black/60 backdrop-blur-xl border border-white/20 rounded-xl;
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
   }
 
@@ -49,3 +52,15 @@
   }
 }
 
+
+/* Set on <html> by the performance governor when the GPU is the bottleneck: drop every
+   backdrop blur over the 3D view and compensate with a more opaque fill. */
+.perf-lite .glass-panel,
+.perf-lite [class*='backdrop-blur'] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.perf-lite .glass-panel {
+  background-color: rgb(0 0 0 / 0.78);
+}

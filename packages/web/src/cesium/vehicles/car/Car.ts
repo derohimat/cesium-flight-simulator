@@ -1,14 +1,19 @@
 import * as Cesium from 'cesium';
-import { Vehicle, VehicleConfig } from '../Vehicle';
+import { Vehicle, VehicleConfig, VehicleState } from '../Vehicle';
 import { CarPhysics, PhysicsConfig, PhysicsInput } from './CarPhysics';
 import { TerrainClamping } from './TerrainClamping';
+
+/**
+ * Metres travelled per second per unit of `velocity`. The car used to move `velocity * 0.01`
+ * metres per *rendered frame*, i.e. 0.6·velocity m/s at 60 fps and twice that at 120 fps.
+ */
+const DISTANCE_PER_VELOCITY_UNIT = 0.6;
 
 export class Car extends Vehicle {
   private physics: CarPhysics;
   private terrainClamping: TerrainClamping;
   private speedVector: Cesium.Cartesian3 = new Cesium.Cartesian3();
   private roverMode: boolean = true;
-  private scene: Cesium.Scene | null = null;
 
   private collisionDetectionEnabled: boolean = false;
   private readonly PROBE_DISTANCE = 1.0;
@@ -33,6 +38,9 @@ export class Car extends Vehicle {
   private static readonly scratchWorldForward = new Cesium.Cartesian3();
   private static readonly scratchBounceVector = new Cesium.Cartesian3();
   private static readonly scratchCarHPR = new Cesium.HeadingPitchRoll();
+  private static readonly scratchProbe = new Cesium.Cartesian3();
+  private static readonly scratchCartographic = new Cesium.Cartographic();
+  private static readonly scratchProbeCartographic = new Cesium.Cartographic();
 
   constructor(id: string, config: VehicleConfig) {
     super(id, config);
@@ -55,11 +63,6 @@ export class Car extends Vehicle {
     this.currentVehicleRoll = this.hpRoll.roll;
   }
 
-  public async initialize(scene: Cesium.Scene): Promise<void> {
-    this.scene = scene;
-    await super.initialize(scene);
-  }
-
   protected onModelReady(): void {
     if (this.primitive) {
       this.primitive.activeAnimations.addAll({
@@ -69,25 +72,15 @@ export class Car extends Vehicle {
     }
   }
 
-  public update(deltaTime: number): void {
-    if (!this.isReady || !this.physicsEnabled) return;
+  protected step(deltaTime: number): void {
+    // Probe before moving, like before, but only in the direction of travel, and only when a
+    // query is left over after reserving one for ground contact.
+    const hit = this.collisionDetectionEnabled ? this.checkCollision() : null;
 
-    const physicsResult = this.physics.update(
-      deltaTime,
-      this.input,
-      this.scene
-        ? {
-            scene: this.scene,
-            position: this.position,
-            heading: this.currentVehicleHeading,
-            exclude: this.primitive ? [this.primitive] : [],
-            enabled: this.collisionDetectionEnabled,
-            probeDistance: this.PROBE_DISTANCE,
-            bounceDistance: this.BOUNCE_DISTANCE,
-            heightThreshold: this.HEIGHT_THRESHOLD
-          }
-        : undefined
-    );
+    let physicsResult = this.physics.update(deltaTime, this.input);
+    if (hit) {
+      physicsResult = this.physics.applyCollision(hit === 'front' ? -this.BOUNCE_DISTANCE : this.BOUNCE_DISTANCE);
+    }
 
     this.velocity = physicsResult.velocity;
     this.speed = physicsResult.speed;
@@ -104,7 +97,7 @@ export class Car extends Vehicle {
     this.hpRoll.pitch = this.currentVehiclePitch;
     this.hpRoll.roll = this.currentVehicleRoll;
 
-    const signedStep = this.velocity * 0.01;
+    const signedStep = this.velocity * DISTANCE_PER_VELOCITY_UNIT * deltaTime;
     
     Car.scratchCarHPR.heading = this.currentVehicleHeading;
     Car.scratchCarHPR.pitch = this.currentVehiclePitch;
@@ -130,18 +123,8 @@ export class Car extends Vehicle {
       this.position
     );
 
-    if (this.scene && typeof physicsResult.bounce === 'number' && physicsResult.bounce !== 0) {
-      Cesium.Transforms.eastNorthUpToFixedFrame(this.position, undefined, Car.scratchTransform);
-      Car.scratchLocalForward.x = Math.cos(this.currentVehicleHeading);
-      Car.scratchLocalForward.y = -Math.sin(this.currentVehicleHeading);
-      Car.scratchLocalForward.z = 0;
-      
-      const worldForward = Cesium.Matrix4.multiplyByPointAsVector(
-        Car.scratchTransform,
-        Car.scratchLocalForward,
-        Car.scratchWorldForward
-      );
-      Cesium.Cartesian3.normalize(worldForward, worldForward);
+    if (typeof physicsResult.bounce === 'number' && physicsResult.bounce !== 0) {
+      const worldForward = this.getWorldForward(Car.scratchWorldForward);
       const bounceVector = Cesium.Cartesian3.multiplyByScalar(
         worldForward, 
         physicsResult.bounce, 
@@ -150,17 +133,48 @@ export class Car extends Vehicle {
       this.position = Cesium.Cartesian3.add(this.position, bounceVector, this.position);
     }
 
-    if (this.roverMode) {
-      this.clampToGround();
+    if (this.roverMode && this.primitive && this.groundSampler) {
+      this.terrainClamping.clampToGround(this.position, deltaTime, this.groundSampler, [this.primitive]);
     }
-
-    this.updateModelMatrix();
   }
 
-  private clampToGround(): void {
-    if (this.scene && this.primitive) {
-      this.position = this.terrainClamping.clampToGround(this.position, this.scene, [this.primitive]);
+  /** Horizontal unit vector along the current heading. */
+  private getWorldForward(result: Cesium.Cartesian3): Cesium.Cartesian3 {
+    Cesium.Transforms.eastNorthUpToFixedFrame(this.position, undefined, Car.scratchTransform);
+    Car.scratchLocalForward.x = Math.cos(this.currentVehicleHeading);
+    Car.scratchLocalForward.y = -Math.sin(this.currentVehicleHeading);
+    Car.scratchLocalForward.z = 0;
+    Cesium.Matrix4.multiplyByPointAsVector(Car.scratchTransform, Car.scratchLocalForward, result);
+    return Cesium.Cartesian3.normalize(result, result);
+  }
+
+  private checkCollision(): 'front' | 'back' | null {
+    const sampler = this.groundSampler;
+    if (!sampler || !this.primitive || Math.abs(this.velocity) <= 0.1) return null;
+    if (sampler.remainingBudget() < 2) return null;
+
+    const direction = this.velocity > 0 ? 1 : -1;
+    const worldForward = this.getWorldForward(Car.scratchWorldForward);
+    Cesium.Cartesian3.multiplyByScalar(worldForward, direction * this.PROBE_DISTANCE, Car.scratchProbe);
+    Cesium.Cartesian3.add(this.position, Car.scratchProbe, Car.scratchProbe);
+
+    const probe = Cesium.Cartographic.fromCartesian(Car.scratchProbe, Cesium.Ellipsoid.WGS84, Car.scratchProbeCartographic);
+    const here = Cesium.Cartographic.fromCartesian(this.position, Cesium.Ellipsoid.WGS84, Car.scratchCartographic);
+    if (!probe || !here) return null;
+
+    const obstacleHeight = sampler.sampleHeight(probe, [this.primitive]);
+    if (obstacleHeight !== undefined && obstacleHeight > here.height + this.HEIGHT_THRESHOLD) {
+      return direction > 0 ? 'front' : 'back';
     }
+    return null;
+  }
+
+  public setState(state: VehicleState): void {
+    super.setState(state);
+    this.currentVehicleHeading = state.heading;
+    this.currentVehiclePitch = state.pitch;
+    this.currentVehicleRoll = state.roll;
+    this.terrainClamping.reset();
   }
 
   public setInput(input: Partial<PhysicsInput>): void {

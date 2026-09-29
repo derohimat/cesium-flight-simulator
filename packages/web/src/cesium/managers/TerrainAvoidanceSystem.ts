@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import { TerrainHeights } from '../core/TerrainHeights';
 
 /**
  * TerrainAvoidanceSystem - Automatic collision avoidance for content creation mode
@@ -23,7 +24,9 @@ export interface AutoAltitudeResult {
 }
 
 export class TerrainAvoidanceSystem {
-  private viewer: Cesium.Viewer;
+  private heights: TerrainHeights;
+  /** Set during `withHeights`' dry run: collects the points a computation will sample. */
+  private recording: { lng: number; lat: number }[] | null = null;
 
   // Safety margins
   private readonly MINIMUM_SAFE_HEIGHT = 50; // meters above terrain
@@ -46,8 +49,28 @@ export class TerrainAvoidanceSystem {
     satellite: { min: 800, max: 2000, description: 'High-altitude overview' },
   };
 
-  constructor(viewer: Cesium.Viewer) {
-    this.viewer = viewer;
+  constructor(heights: TerrainHeights = new TerrainHeights()) {
+    this.heights = heights;
+  }
+
+  /**
+   * Run a terrain computation with real heights. Everything below samples through the
+   * synchronous `getTerrainHeight`, which reads a cache; this runs `compute` once to record
+   * which points it needs (the point set never depends on the heights), fetches them in a
+   * single batch, then runs it for real.
+   *
+   *   const alt = await avoidance.withHeights(() => avoidance.calculateAutoAltitude(lng, lat));
+   */
+  public async withHeights<T>(compute: () => T): Promise<T> {
+    this.recording = [];
+    try {
+      compute();
+    } finally {
+      const points = this.recording;
+      this.recording = null;
+      await this.heights.prefetch(points);
+    }
+    return compute();
   }
 
   /**
@@ -142,8 +165,10 @@ export class TerrainAvoidanceSystem {
         confidence = 0.6;
     }
 
-    // Clamp to reasonable cinematic range
-    recommendedAltitude = Math.max(80, Math.min(1500, recommendedAltitude));
+    // Clamp to a reasonable cinematic range *above the highest sampled terrain*. Altitudes here
+    // are absolute, so the old absolute 80–1500 m clamp put the camera inside anything taller
+    // than 1500 m (harmless only while every height read as sea level).
+    recommendedAltitude = Math.max(maxHeight + 80, Math.min(maxHeight + 1500, recommendedAltitude));
 
     return {
       altitude: recommendedAltitude,
@@ -233,9 +258,12 @@ export class TerrainAvoidanceSystem {
    * Get the terrain height at a given position
    */
   public getTerrainHeight(lng: number, lat: number): number {
-    const cartographic = Cesium.Cartographic.fromDegrees(lng, lat);
-    const height = this.viewer.scene.globe.getHeight(cartographic);
-    return height || 0;
+    if (this.recording) {
+      this.recording.push({ lng, lat });
+      return 0;
+    }
+    // Sea level if not prefetched or unavailable — the previous behaviour everywhere.
+    return this.heights.get(lng, lat) ?? 0;
   }
 
   /**
@@ -243,8 +271,10 @@ export class TerrainAvoidanceSystem {
    */
   public getTerrainHeightAtPosition(position: Cesium.Cartesian3): number {
     const cartographic = Cesium.Cartographic.fromCartesian(position);
-    const height = this.viewer.scene.globe.getHeight(cartographic);
-    return height || 0;
+    return this.getTerrainHeight(
+      Cesium.Math.toDegrees(cartographic.longitude),
+      Cesium.Math.toDegrees(cartographic.latitude)
+    );
   }
 
   /**
@@ -465,7 +495,7 @@ export class TerrainAvoidanceSystem {
    */
   public isPositionSafe(position: Cesium.Cartesian3): boolean {
     const cartographic = Cesium.Cartographic.fromCartesian(position);
-    const terrainHeight = this.viewer.scene.globe.getHeight(cartographic) || 0;
+    const terrainHeight = this.getTerrainHeightAtPosition(position);
     const currentHeight = cartographic.height;
 
     return currentHeight > terrainHeight + this.MINIMUM_SAFE_HEIGHT;

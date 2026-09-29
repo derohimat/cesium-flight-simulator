@@ -1,12 +1,13 @@
 import { useMemo } from 'react';
 import { useGameBridge } from './useGameBridge';
 import type { CameraType } from '../../cesium/managers/CameraManager';
-import type { VehicleStateData } from '../../cesium/bridge/types';
+import type { PerformanceStatsData, VehicleStateData } from '../../cesium/bridge/types';
 import type { QualityConfig } from '../../cesium/core/Scene';
 
 export function useGameMethod() {
   const bridge = useGameBridge();
 
+  // Stable identity per bridge, so effects that depend on these methods don't re-run every render.
   return useMemo(() => ({
     switchCamera: () => bridge.switchCamera(),
     getCameraType: (): CameraType => bridge.getCameraType(),
@@ -26,6 +27,9 @@ export function useGameMethod() {
     setMode: (mode: 'play' | 'builder') => bridge.setMode(mode),
     getMode: () => bridge.getMode(),
     setThrottle: (percent: number) => bridge.setThrottle(percent),
+    setAdaptiveQuality: (enabled: boolean) => bridge.setAdaptiveQuality(enabled),
+    getPerformanceStats: (): PerformanceStatsData => bridge.getPerformanceStats(),
+    getFrameHistory: () => bridge.getFrameHistory(),
     flyPath: (waypoints: { lat: number; lon: number }[], options?: { speed?: number; altitude?: number }) => bridge.flyPath(waypoints, options),
     startRecording: () => bridge.startRecording(),
     stopRecording: (fileName?: string) => bridge.stopRecording(fileName),
