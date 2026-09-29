@@ -28,6 +28,13 @@ export class GroundSampler implements FrameHook {
   private windowStart = performance.now();
   private readonly supported: boolean;
 
+  /**
+   * Overlays (mission gates, beacons) hidden for the duration of each query. Cesium still runs
+   * non-pickable primitives in pick passes and their depth is what height queries read, so a
+   * gate under the aircraft would otherwise register as ground.
+   */
+  private queryHidden: { show: boolean }[] = [];
+
   /** Height queries issued per second, averaged over the last full second. */
   public queriesPerSecond = 0;
 
@@ -52,6 +59,26 @@ export class GroundSampler implements FrameHook {
     return this.supported && this.remaining > 0;
   }
 
+  public hideDuringQueries(overlay: { show: boolean }): void {
+    if (!this.queryHidden.includes(overlay)) this.queryHidden.push(overlay);
+  }
+
+  public stopHidingDuringQueries(overlay: { show: boolean }): void {
+    this.queryHidden = this.queryHidden.filter((o) => o !== overlay);
+  }
+
+  /** Run a query with overlays hidden, restoring each one's previous visibility. */
+  private withOverlaysHidden<T>(query: () => T): T {
+    if (this.queryHidden.length === 0) return query();
+    const previous = this.queryHidden.map((o) => o.show);
+    for (const o of this.queryHidden) o.show = false;
+    try {
+      return query();
+    } finally {
+      this.queryHidden.forEach((o, i) => (o.show = previous[i]));
+    }
+  }
+
   /** Queries still allowed this frame, so callers can reserve budget for more important ones. */
   public remainingBudget(): number {
     return this.supported ? this.remaining : 0;
@@ -67,7 +94,21 @@ export class GroundSampler implements FrameHook {
     this.remaining--;
     this.queriesThisWindow++;
     try {
-      return this.scene.sampleHeight(cartographic, objectsToExclude);
+      return this.withOverlaysHidden(() => this.scene.sampleHeight(cartographic, objectsToExclude));
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * One-off height query outside the per-frame budget, for user actions (e.g. recovering after
+   * a crash) rather than per-step physics.
+   */
+  public sampleHeightNow(cartographic: Cesium.Cartographic, objectsToExclude?: object[]): number | undefined {
+    if (!this.supported) return undefined;
+    this.queriesThisWindow++;
+    try {
+      return this.withOverlaysHidden(() => this.scene.sampleHeight(cartographic, objectsToExclude));
     } catch {
       return undefined;
     }
@@ -84,7 +125,7 @@ export class GroundSampler implements FrameHook {
     this.remaining--;
     this.queriesThisWindow++;
     try {
-      const hit = pickFromRay.call(this.scene, ray, objectsToExclude);
+      const hit = this.withOverlaysHidden(() => pickFromRay.call(this.scene, ray, objectsToExclude));
       return hit?.position ? Cesium.Cartesian3.distance(ray.origin, hit.position) : undefined;
     } catch {
       return undefined;

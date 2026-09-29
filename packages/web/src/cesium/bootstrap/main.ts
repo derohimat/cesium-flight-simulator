@@ -3,6 +3,8 @@ import { Scene } from '../core/Scene';
 import { GameLoop } from '../core/GameLoop';
 import { GroundSampler } from '../core/GroundSampler';
 import { PerformanceGovernor } from '../core/PerformanceGovernor';
+import { TerrainHeights } from '../core/TerrainHeights';
+import { MissionManager } from '../missions/MissionManager';
 import { VehicleManager } from '../managers/VehicleManager';
 import { CameraManager } from '../managers/CameraManager';
 import { InputManager } from '../input/InputManager';
@@ -17,6 +19,8 @@ export class CesiumVehicleGame {
   private gameLoop: GameLoop;
   private groundSampler: GroundSampler;
   private performanceGovernor: PerformanceGovernor;
+  private terrainHeights: TerrainHeights;
+  private missionManager: MissionManager;
   private vehicleManager: VehicleManager;
   private cameraManager: CameraManager;
   private inputManager: InputManager;
@@ -31,13 +35,15 @@ export class CesiumVehicleGame {
     this.gameLoop = new GameLoop(this.scene);
     this.groundSampler = new GroundSampler(this.scene.scene);
     this.performanceGovernor = new PerformanceGovernor(this.scene);
-    this.vehicleManager = new VehicleManager(this.scene, this.groundSampler);
+    this.terrainHeights = new TerrainHeights();
+    this.vehicleManager = new VehicleManager(this.scene, this.groundSampler, this.terrainHeights);
     this.cameraManager = new CameraManager(this.scene.camera);
     this.inputManager = new InputManager();
     this.objectManager = new ObjectManager(this.scene.viewer);
     this.placementController = new PlacementController(this.scene.viewer, this.objectManager);
     this.autopilotManager = new AutopilotManager(this);
     this.recordingManager = new RecordingManager(this.scene);
+    this.missionManager = new MissionManager(this);
 
     this.setupSystems();
     this.setupInputHandling();
@@ -49,6 +55,8 @@ export class CesiumVehicleGame {
     this.gameLoop.addFrameHook(this.performanceGovernor);
     // Fixed-rate physics, then per-frame systems that read the interpolated vehicle pose.
     this.gameLoop.addFixedUpdatable(this.vehicleManager);
+    // After vehicles: missions test the segment each aircraft just flew.
+    this.gameLoop.addFixedUpdatable(this.missionManager);
     this.gameLoop.addUpdatable(this.cameraManager);
     this.gameLoop.addUpdatable({
       update: (deltaTime: number) => {
@@ -169,6 +177,15 @@ export class CesiumVehicleGame {
 
   public getPerformanceGovernor(): PerformanceGovernor {
     return this.performanceGovernor;
+  }
+
+  /** Shared terrain elevation cache (autopilot planning, mission targets). */
+  public getTerrainHeights(): TerrainHeights {
+    return this.terrainHeights;
+  }
+
+  public getMissionManager(): MissionManager {
+    return this.missionManager;
   }
 
   public getObjectManager(): ObjectManager {

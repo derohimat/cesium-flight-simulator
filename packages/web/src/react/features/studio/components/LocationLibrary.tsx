@@ -1,47 +1,11 @@
 import { useState } from 'react';
 import { Panel } from '../../../shared/components/Panel';
+import { PLACES, type Place } from '../../../../data/places';
 
-interface Location {
-  id: string;
-  name: string;
-  category: 'landmark' | 'city' | 'nature' | 'custom';
-  lat: number;
-  lon: number;
-  altitude: number;
-  thumbnail?: string;
-  description?: string;
-}
+type Location = Place;
 
-// Curated cinematic locations
-const PRESET_LOCATIONS: Location[] = [
-  // Landmarks
-  { id: 'eiffel', name: 'Eiffel Tower', category: 'landmark', lat: 48.8584, lon: 2.2945, altitude: 400, description: 'Paris, France' },
-  { id: 'colosseum', name: 'Colosseum', category: 'landmark', lat: 41.8902, lon: 12.4922, altitude: 300, description: 'Rome, Italy' },
-  { id: 'taj', name: 'Taj Mahal', category: 'landmark', lat: 27.1751, lon: 78.0421, altitude: 250, description: 'Agra, India' },
-  { id: 'sydney', name: 'Sydney Opera House', category: 'landmark', lat: -33.8568, lon: 151.2153, altitude: 300, description: 'Sydney, Australia' },
-  { id: 'statue', name: 'Statue of Liberty', category: 'landmark', lat: 40.6892, lon: -74.0445, altitude: 200, description: 'New York, USA' },
-  { id: 'pyramid', name: 'Great Pyramid', category: 'landmark', lat: 29.9792, lon: 31.1342, altitude: 300, description: 'Giza, Egypt' },
-  { id: 'burj', name: 'Burj Khalifa', category: 'landmark', lat: 25.1972, lon: 55.2744, altitude: 1000, description: 'Dubai, UAE' },
-  { id: 'christ', name: 'Christ the Redeemer', category: 'landmark', lat: -22.9519, lon: -43.2105, altitude: 500, description: 'Rio de Janeiro, Brazil' },
-  
-  // Cities
-  { id: 'manhattan', name: 'Manhattan Skyline', category: 'city', lat: 40.7580, lon: -73.9855, altitude: 600, description: 'New York, USA' },
-  { id: 'tokyo', name: 'Tokyo Tower', category: 'city', lat: 35.6586, lon: 139.7454, altitude: 500, description: 'Tokyo, Japan' },
-  { id: 'london', name: 'Tower Bridge', category: 'city', lat: 51.5055, lon: -0.0754, altitude: 250, description: 'London, UK' },
-  { id: 'hongkong', name: 'Victoria Harbour', category: 'city', lat: 22.2855, lon: 114.1577, altitude: 500, description: 'Hong Kong' },
-  { id: 'singapore', name: 'Marina Bay', category: 'city', lat: 1.2838, lon: 103.8606, altitude: 350, description: 'Singapore' },
-  { id: 'dubai', name: 'Dubai Marina', category: 'city', lat: 25.0805, lon: 55.1403, altitude: 400, description: 'Dubai, UAE' },
-  
-  // Nature
-  { id: 'grandcanyon', name: 'Grand Canyon', category: 'nature', lat: 36.0544, lon: -112.1401, altitude: 2500, description: 'Arizona, USA' },
-  { id: 'everest', name: 'Mount Everest', category: 'nature', lat: 27.9881, lon: 86.9250, altitude: 10000, description: 'Nepal/Tibet' },
-  { id: 'niagara', name: 'Niagara Falls', category: 'nature', lat: 43.0962, lon: -79.0377, altitude: 300, description: 'USA/Canada' },
-  { id: 'aurora', name: 'Northern Iceland', category: 'nature', lat: 65.6835, lon: -18.0878, altitude: 500, description: 'Iceland' },
-  { id: 'amazon', name: 'Amazon River', category: 'nature', lat: -3.4653, lon: -62.2159, altitude: 300, description: 'Brazil' },
-  { id: 'matterhorn', name: 'Matterhorn', category: 'nature', lat: 45.9763, lon: 7.6586, altitude: 5000, description: 'Switzerland' },
-  { id: 'uluru', name: 'Uluru', category: 'nature', lat: -25.3444, lon: 131.0369, altitude: 500, description: 'Australia' },
-  { id: 'fuji', name: 'Mount Fuji', category: 'nature', lat: 35.3606, lon: 138.7274, altitude: 4500, description: 'Japan' },
-];
+// Curated cinematic locations (shared with missions and landmark cards)
+const PRESET_LOCATIONS: Location[] = PLACES;
 
 interface LocationLibraryProps {
   onSelectLocation: (location: Location) => void;

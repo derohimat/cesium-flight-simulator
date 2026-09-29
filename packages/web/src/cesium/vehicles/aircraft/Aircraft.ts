@@ -23,10 +23,23 @@ const LOW_LEVEL_GROUND_INTERVAL = 0.1;
 /** Low level: distance flown between forward rays. */
 const LOW_LEVEL_PROBE_SPACING = 8;
 /** Something on the flight path within this many seconds switches to dense probing. */
-const OBSTACLE_WARNING_TIME = 2 * HIGH_LEVEL_INTERVAL;
+const OBSTACLE_WARNING_TIME = 5;
 /** The original nose clearance: an obstacle this close ahead is a crash. */
 const NOSE_DISTANCE = 2;
 const CRASH_MARGIN = 0.5;
+
+/**
+ * Automatic ground-collision avoidance (like auto-GCAS on modern fighters): when the sweep ray
+ * sees terrain or a building on the flight path within GCAS_LOOKAHEAD seconds, or the aircraft
+ * is low and descending, it takes over — wings level, full climb — and hands control back once
+ * the path has been clear for GCAS_RELEASE seconds. Climbing pitches the nose 30°, so the
+ * aircraft gains roughly half its airspeed in height per second.
+ */
+const GCAS_LOOKAHEAD = 4;
+const GCAS_MIN_CLEARANCE = 40;
+const GCAS_RELEASE = 1;
+/** A forward ray result older than this is stale. */
+const GCAS_HIT_MAX_AGE = 0.6;
 
 export class Aircraft extends Vehicle {
   private physics: AircraftPhysics;
@@ -47,6 +60,15 @@ export class Aircraft extends Vehicle {
   private nextForwardProbeAt = 0;
   private groundClearance = Infinity;
   private obstacleAhead = false;
+  private lastHitDistance = Infinity;
+  private lastHitAt = -Infinity;
+  private gcasEnabled = true;
+  private gcasActive = false;
+  private gcasClearFor = 0;
+  private readonly gcasInput: AircraftInput = {
+    throttle: false, brake: false, turnLeft: false, turnRight: false,
+    altitudeUp: true, altitudeDown: false, rollLeft: false, rollRight: false,
+  };
   /** World-space displacement of the last physics step (flight direction for the sweep ray). */
   private readonly lastStepDelta = new Cesium.Cartesian3();
 
@@ -86,7 +108,7 @@ export class Aircraft extends Vehicle {
   protected step(deltaTime: number): void {
     if (this.crashed) return;
 
-    const result = this.physics.update(deltaTime, this.input);
+    const result = this.physics.update(deltaTime, this.gcasEnabled ? this.applyGcas(deltaTime) : this.input);
 
     this.hpRoll.heading = result.heading;
     this.hpRoll.pitch = result.pitch;
@@ -189,9 +211,43 @@ export class Aircraft extends Vehicle {
       return;
     }
 
+    this.lastHitDistance = hitDistance;
+    this.lastHitAt = this.simTime;
     this.obstacleAhead = hitDistance <= this.speed * OBSTACLE_WARNING_TIME;
     this.nextForwardProbeAt =
       this.simTime + (this.isLowLevel() ? denseInterval : HIGH_LEVEL_INTERVAL);
+  }
+
+  /** Pilot input, or the pull-up override while a collision is imminent. */
+  private applyGcas(deltaTime: number): AircraftInput {
+    const hitFresh = this.simTime - this.lastHitAt < GCAS_HIT_MAX_AGE;
+    const timeToImpact = hitFresh ? this.lastHitDistance / Math.max(this.speed, 1) : Infinity;
+    const descending = this.hpRoll.pitch <= 0.02 && !this.input.altitudeUp;
+    const danger =
+      timeToImpact < GCAS_LOOKAHEAD || (this.groundClearance < GCAS_MIN_CLEARANCE && descending);
+
+    if (danger) {
+      this.gcasActive = true;
+      this.gcasClearFor = 0;
+    } else if (this.gcasActive) {
+      this.gcasClearFor += deltaTime;
+      if (this.gcasClearFor >= GCAS_RELEASE) this.gcasActive = false;
+    }
+    if (!this.gcasActive) return this.input;
+
+    // Keep the pilot's speed setting (e.g. mobile throttle), override everything else.
+    this.gcasInput.targetSpeed = this.input.targetSpeed;
+    return this.gcasInput;
+  }
+
+  public setCollisionAssist(enabled: boolean): void {
+    this.gcasEnabled = enabled;
+    if (!enabled) this.gcasActive = false;
+  }
+
+  /** True while auto-GCAS is flying the aircraft away from terrain. */
+  public isCollisionAssistActive(): boolean {
+    return this.gcasActive;
   }
 
   private crash(): void {
@@ -209,8 +265,52 @@ export class Aircraft extends Vehicle {
     this.crashed = false;
     this.groundClearance = Infinity;
     this.obstacleAhead = false;
+    this.lastHitDistance = Infinity;
+    this.gcasActive = false;
     this.nextGroundProbeAt = this.simTime;
     this.nextForwardProbeAt = this.simTime;
+  }
+
+  /**
+   * Put the aircraft in level flight at `position`, on `heading` (vehicle frame: 0 = east,
+   * i.e. compass bearing − 90°), at `speed`. Clears a crash and the interpolation history.
+   * Unlike setState, this also resets the flight model, which otherwise keeps its own heading
+   * and speed and overrides them on the next step.
+   */
+  public resetFlight(position: Cesium.Cartesian3, heading: number, speed: number): void {
+    this.physics.reset(heading, speed);
+    Cesium.Cartesian3.clone(position, this.position);
+    this.hpRoll.heading = heading;
+    this.hpRoll.pitch = 0;
+    this.hpRoll.roll = 0;
+    this.velocity = this.speed = Math.max(speed, this.physics.getMinSpeed());
+    Cesium.Cartesian3.clone(Cesium.Cartesian3.ZERO, this.lastStepDelta);
+    this.resetCrash();
+    this.snapToSimulation();
+  }
+
+  public getMinSpeed(): number {
+    return this.physics.getMinSpeed();
+  }
+
+  /** Point `distance` metres ahead along the current heading (horizontal), for clearance checks. */
+  public getPointAhead(distance: number, result: Cesium.Cartesian3): Cesium.Cartesian3 {
+    Cesium.Transforms.eastNorthUpToFixedFrame(this.position, undefined, Aircraft.scratchTransform);
+    const local = new Cesium.Cartesian3(
+      Math.cos(this.hpRoll.heading) * distance,
+      -Math.sin(this.hpRoll.heading) * distance,
+      0
+    );
+    return Cesium.Matrix4.multiplyByPoint(Aircraft.scratchTransform, local, result);
+  }
+
+  /** Exclusion list for height queries around this aircraft. */
+  public getPrimitiveForQueries(): object[] {
+    return this.primitive ? [this.primitive] : [];
+  }
+
+  public getHeading(): number {
+    return this.hpRoll.heading;
   }
 
   public setInput(input: Partial<AircraftInput>): void {

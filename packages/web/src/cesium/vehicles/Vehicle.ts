@@ -174,6 +174,11 @@ export abstract class Vehicle implements FixedUpdatable {
     this.updateModelMatrix();
   }
 
+  /** Current simulation (not interpolated) position. */
+  public getSimulationPosition(result: Cesium.Cartesian3): Cesium.Cartesian3 {
+    return Cesium.Cartesian3.clone(this.position, result);
+  }
+
   public getPosition(): Cesium.Cartesian3 {
     return Cesium.Cartesian3.clone(this.renderPosition, Vehicle.scratchPositionClone);
   }

@@ -1,6 +1,8 @@
 import * as Cesium from 'cesium';
 import type { CameraType } from '../managers/CameraManager';
 import type { PerformanceSnapshot } from '../core/PerformanceGovernor';
+import type { MissionEvent, MissionSnapshot } from '../missions/types';
+import type { LandmarkNearby } from '../missions/LandmarkWatcher';
 
 export type GameMode = 'play' | 'builder';
 
@@ -11,6 +13,8 @@ export interface VehicleStateData {
   heading: number;
   pitch: number;
   roll: number;
+  /** Auto-GCAS is currently pulling the aircraft away from terrain. */
+  collisionAssistActive: boolean;
   /** Degrees / metres, precomputed so UI code doesn't need Cesium math. */
   longitude: number;
   latitude: number;
@@ -87,6 +91,10 @@ export interface GameEvents {
   crashed: CrashData;
   modeChanged: ModeChangedData;
   performanceStats: PerformanceStatsData;
+  missionState: MissionSnapshot;
+  sceneryLoading: { loading: boolean };
+  missionEvent: MissionEvent;
+  landmarkNearby: LandmarkNearby;
   [key: string]: unknown;
 }
 

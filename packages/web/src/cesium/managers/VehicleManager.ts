@@ -5,7 +5,25 @@ import { Aircraft } from '../vehicles/aircraft/Aircraft';
 import { Scene } from '../core/Scene';
 import { FixedUpdatable } from '../core/GameLoop';
 import type { GroundSampler } from '../core/GroundSampler';
+import type { TerrainHeights } from '../core/TerrainHeights';
 import { InputManager } from '../input/InputManager';
+
+/** Teleports arrive at least this far above the real ground. */
+const SAFE_ARRIVAL_CLEARANCE = 150;
+/** Teleports arrive no faster than this, so there's time to react to the new surroundings. */
+const MAX_ARRIVAL_SPEED = 150;
+const SCENERY_TIMEOUT_MS = 8000;
+
+export interface TeleportCallbacks {
+  /** The aircraft has been placed (e.g. snap the camera behind it). */
+  onPlaced?: () => void;
+  /** True while holding position for scenery to stream in. */
+  onLoading?: (loading: boolean) => void;
+}
+
+/** After a crash, resume this far above the highest surface at and just ahead of the wreck. */
+const RECOVERY_CLEARANCE = 120;
+const RECOVERY_LOOKAHEAD = [0, 150, 300];
 
 const DEFAULT_SPAWN_LOCATION = {
   lng: 11.9746,
@@ -19,8 +37,91 @@ export class VehicleManager implements FixedUpdatable {
   private onVehicleChangeCallback: ((vehicle: Vehicle) => void) | null = null;
   private onVehicleChangeCallbacks: Array<(vehicle: Vehicle) => void> = [];
 
-  constructor(scene: Scene, private groundSampler: GroundSampler) {
+  private collisionAssist = true;
+  private teleportToken = 0;
+
+  constructor(scene: Scene, private groundSampler: GroundSampler, private terrainHeights: TerrainHeights) {
     this.scene = scene;
+  }
+
+  /** Auto-GCAS on/off for all aircraft (current and future). */
+  public setCollisionAssist(enabled: boolean): void {
+    this.collisionAssist = enabled;
+    for (const vehicle of this.vehicles.values()) {
+      if (vehicle instanceof Aircraft) vehicle.setCollisionAssist(enabled);
+    }
+  }
+
+  public getCollisionAssist(): boolean {
+    return this.collisionAssist;
+  }
+
+  /**
+   * Move the active vehicle to a location without crashing on arrival.
+   *
+   * Location altitudes are heights above sea level, so in hilly or high places they used to put
+   * the aircraft underground; and it kept flying straight into scenery still streaming in at low
+   * detail. Aircraft now arrive at least SAFE_ARRIVAL_CLEARANCE above the real ground, in level
+   * flight, and hold position until the destination's tiles have loaded.
+   */
+  public async teleport(
+    longitude: number,
+    latitude: number,
+    altitude: number,
+    heading: number,
+    callbacks: TeleportCallbacks = {}
+  ): Promise<void> {
+    const vehicle = this.activeVehicle;
+    if (!vehicle) return;
+
+    if (!(vehicle instanceof Aircraft)) {
+      const currentState = vehicle.getState();
+      vehicle.setState({
+        ...currentState,
+        position: Cesium.Cartesian3.fromDegrees(longitude, latitude, altitude),
+        heading,
+        pitch: 0,
+        roll: 0,
+        velocity: 0,
+        speed: 0,
+      });
+      callbacks.onPlaced?.();
+      return;
+    }
+
+    const token = ++this.teleportToken;
+    // Remember a hold that isn't ours (builder mode, mission countdown) so we don't undo it.
+    const heldByOther = !vehicle.physicsEnabled && !this.teleportHolding;
+    vehicle.physicsEnabled = false;
+    this.teleportHolding = true;
+    callbacks.onLoading?.(true);
+
+    try {
+      await this.terrainHeights.prefetch([{ lng: longitude, lat: latitude }]);
+      if (token !== this.teleportToken) return;
+
+      const ground = this.terrainHeights.get(longitude, latitude);
+      const height = ground === undefined ? altitude : Math.max(altitude, ground + SAFE_ARRIVAL_CLEARANCE);
+      const speed = Math.min(Math.max(vehicle.getState().speed, vehicle.getMinSpeed()), MAX_ARRIVAL_SPEED);
+      vehicle.resetFlight(Cesium.Cartesian3.fromDegrees(longitude, latitude, height), heading, speed);
+      callbacks.onPlaced?.();
+
+      await this.scene.waitForTiles(SCENERY_TIMEOUT_MS);
+    } finally {
+      if (token === this.teleportToken) {
+        this.teleportHolding = false;
+        if (!heldByOther) vehicle.physicsEnabled = true;
+        callbacks.onLoading?.(false);
+      }
+    }
+  }
+
+  private teleportHolding = false;
+
+  /** Drop a pending teleport's scenery hold (e.g. a mission is taking over the aircraft). */
+  public cancelTeleport(): void {
+    this.teleportToken++;
+    this.teleportHolding = false;
   }
 
   private async addVehicle(vehicle: Vehicle): Promise<void> {
@@ -179,6 +280,7 @@ export class VehicleManager implements FixedUpdatable {
       position: spawnPosition,
       heading
     });
+    aircraft.setCollisionAssist(this.collisionAssist);
 
     await this.addVehicle(aircraft);
     this.scene.setVehicleQualityMode('aircraft');
@@ -201,9 +303,37 @@ export class VehicleManager implements FixedUpdatable {
     }
   }
 
+  /**
+   * Continue a crashed aircraft from where it crashed: same heading, level flight at minimum
+   * speed, lifted clear of whatever it hit (the surface at the crash point and 150/300 m ahead,
+   * buildings included). Returns false if there is no crashed aircraft.
+   */
+  public recoverFromCrash(): boolean {
+    const aircraft = this.activeVehicle;
+    if (!(aircraft instanceof Aircraft) || !aircraft.isCrashed()) return false;
+
+    const position = aircraft.getSimulationPosition(new Cesium.Cartesian3());
+    const here = Cesium.Cartographic.fromCartesian(position);
+    const exclude = aircraft.getPrimitiveForQueries();
+    let top = here.height;
+    for (const distance of RECOVERY_LOOKAHEAD) {
+      const point = distance === 0 ? position : aircraft.getPointAhead(distance, new Cesium.Cartesian3());
+      const ground = this.groundSampler.sampleHeightNow(Cesium.Cartographic.fromCartesian(point), exclude);
+      if (ground !== undefined) top = Math.max(top, ground);
+    }
+
+    const resume = Cesium.Cartesian3.fromRadians(here.longitude, here.latitude, top + RECOVERY_CLEARANCE);
+    aircraft.resetFlight(resume, aircraft.getHeading(), aircraft.getMinSpeed());
+    console.log(`✈️ Recovered at crash site, ${Math.round(top + RECOVERY_CLEARANCE - here.height)} m higher`);
+    return true;
+  }
+
   public async restartCurrentVehicle(): Promise<void> {
     const active = this.activeVehicle;
     if (!active) return;
+
+    // After a crash, "restart" continues from the crash site instead of the spawn point.
+    if (this.recoverFromCrash()) return;
 
     const isAircraft = active instanceof Aircraft;
     const originalSpawn = Cesium.Cartesian3.fromDegrees(

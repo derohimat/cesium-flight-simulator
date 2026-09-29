@@ -19,7 +19,7 @@ export class AutopilotManager {
      * Initialize terrain avoidance system (call after viewer is ready)
      */
     public initTerrainAvoidance(): void {
-        this.terrainAvoidance = new TerrainAvoidanceSystem();
+        this.terrainAvoidance = new TerrainAvoidanceSystem(this.game.getTerrainHeights());
         console.log('🛡️ Terrain Avoidance System initialized');
     }
 

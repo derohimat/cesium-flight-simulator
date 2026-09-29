@@ -11,6 +11,10 @@ import { useGameMethod } from './hooks/useGameMethod';
 import { HUD } from './features/hud/components/HUD';
 import { CrashScreen } from './features/crash/components/CrashScreen';
 import { RecordingStatus } from './features/hud/components/RecordingStatus';
+import { MissionHUD } from './features/missions/components/MissionHUD';
+import { MissionResult } from './features/missions/components/MissionResult';
+import { LandmarkCard } from './features/missions/components/LandmarkCard';
+import { FlightAssistOverlay } from './features/hud/components/FlightAssistOverlay';
 
 export function App() {
   const { mode } = useGameMode();
@@ -43,8 +47,14 @@ export function App() {
       {/* Mobile controls */}
       {isMobile && <ThrottleSlider onChange={handleThrottleChange} />}
 
+      {/* Missions & location info */}
+      <MissionHUD />
+      <LandmarkCard />
+      <FlightAssistOverlay />
+
       {/* Overlays */}
       <CrashScreen />
+      <MissionResult />
       <RecordingStatus />
     </>
   );

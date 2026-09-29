@@ -62,6 +62,19 @@ export class AircraftPhysics {
     this.verticalVelocity = 0;
   }
 
+  /** Level flight on `heading` at `speed` (clamped to the speed range). */
+  public reset(heading: number, speed: number): void {
+    this.currentSpeed = this.targetSpeed = Math.max(this.config.minSpeed, Math.min(this.config.maxSpeed, speed));
+    this.heading = heading;
+    this.pitch = 0;
+    this.roll = 0;
+    this.verticalVelocity = 0;
+  }
+
+  public getMinSpeed(): number {
+    return this.config.minSpeed;
+  }
+
   public update(deltaTime: number, input: AircraftInput): AircraftUpdateResult {
     if (input.targetSpeed !== undefined) {
       this.targetSpeed = Math.max(this.config.minSpeed, Math.min(this.config.maxSpeed, input.targetSpeed));
