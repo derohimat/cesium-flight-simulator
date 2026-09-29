@@ -1,12 +1,14 @@
 import { Panel } from '../../../shared/components/Panel';
 import { Speedometer } from './Speedometer';
 import { MiniMap } from './MiniMap';
+import { AddressChip } from './AddressChip';
 
 export function HUD() {
   return (
     <>
       {/* Speedometer Center */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-4">
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2">
+        <AddressChip />
         <Panel variant="minimal">
           <Speedometer />
         </Panel>

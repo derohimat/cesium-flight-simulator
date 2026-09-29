@@ -44,7 +44,7 @@ export function LandmarkCard() {
   if (!card) return null;
 
   return (
-    <div key={card.key} className="fixed bottom-36 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-slide-in">
+    <div key={card.key} className="fixed bottom-44 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-slide-in">
       <div className="glass-panel px-5 py-3 max-w-md">
         <div className="flex items-baseline gap-2">
           <span className="text-base">📍</span>
