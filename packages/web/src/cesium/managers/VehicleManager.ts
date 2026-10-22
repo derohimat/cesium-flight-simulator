@@ -22,13 +22,10 @@ export interface TeleportCallbacks {
 }
 
 /** After a crash, resume this far above the highest surface at and just ahead of the wreck. */
+import { DEFAULT_FALLBACK_LOCATION } from '../../utils/geolocation';
+
 const RECOVERY_CLEARANCE = 120;
 const RECOVERY_LOOKAHEAD = [0, 150, 300];
-
-const DEFAULT_SPAWN_LOCATION = {
-  lng: 11.9746,
-  lat: 57.7089
-};
 
 export class VehicleManager implements FixedUpdatable {
   private vehicles: Map<string, Vehicle> = new Map();
@@ -39,6 +36,29 @@ export class VehicleManager implements FixedUpdatable {
 
   private collisionAssist = true;
   private teleportToken = 0;
+
+  private defaultSpawnLocation = {
+    lng: DEFAULT_FALLBACK_LOCATION.lng,
+    lat: DEFAULT_FALLBACK_LOCATION.lat,
+    aircraftAltitude: 200,
+    carAltitude: 100,
+  };
+
+  public setDefaultSpawnLocation(lng: number, lat: number, aircraftAltitude?: number, carAltitude?: number): void {
+    this.defaultSpawnLocation.lng = lng;
+    this.defaultSpawnLocation.lat = lat;
+    if (aircraftAltitude !== undefined) {
+      this.defaultSpawnLocation.aircraftAltitude = aircraftAltitude;
+    }
+    if (carAltitude !== undefined) {
+      this.defaultSpawnLocation.carAltitude = carAltitude;
+    }
+    console.log(`📍 VehicleManager default spawn location updated: (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+  }
+
+  public getDefaultSpawnLocation(): { lng: number; lat: number; aircraftAltitude: number; carAltitude: number } {
+    return { ...this.defaultSpawnLocation };
+  }
 
   constructor(scene: Scene, private groundSampler: GroundSampler, private terrainHeights: TerrainHeights) {
     this.scene = scene;
@@ -249,9 +269,9 @@ export class VehicleManager implements FixedUpdatable {
 
   public async spawnCar(id: string = 'car', position?: Cesium.Cartesian3, heading: number = 0): Promise<Vehicle> {
     const spawnPosition = position || Cesium.Cartesian3.fromDegrees(
-      DEFAULT_SPAWN_LOCATION.lng,
-      DEFAULT_SPAWN_LOCATION.lat,
-      100
+      this.defaultSpawnLocation.lng,
+      this.defaultSpawnLocation.lat,
+      this.defaultSpawnLocation.carAltitude
     );
     
     const car = new Car(id, {
@@ -269,9 +289,9 @@ export class VehicleManager implements FixedUpdatable {
 
   public async spawnAircraft(id: string = 'aircraft', position?: Cesium.Cartesian3, heading: number = 0): Promise<Vehicle> {
     const spawnPosition = position || Cesium.Cartesian3.fromDegrees(
-      DEFAULT_SPAWN_LOCATION.lng,
-      DEFAULT_SPAWN_LOCATION.lat,
-      200
+      this.defaultSpawnLocation.lng,
+      this.defaultSpawnLocation.lat,
+      this.defaultSpawnLocation.aircraftAltitude
     );
     
     const aircraft = new Aircraft(id, {
@@ -337,9 +357,9 @@ export class VehicleManager implements FixedUpdatable {
 
     const isAircraft = active instanceof Aircraft;
     const originalSpawn = Cesium.Cartesian3.fromDegrees(
-      DEFAULT_SPAWN_LOCATION.lng,
-      DEFAULT_SPAWN_LOCATION.lat,
-      isAircraft ? 200 : 100
+      this.defaultSpawnLocation.lng,
+      this.defaultSpawnLocation.lat,
+      isAircraft ? this.defaultSpawnLocation.aircraftAltitude : this.defaultSpawnLocation.carAltitude
     );
     const heading = 0;
 

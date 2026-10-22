@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useGameMethod } from '../../../hooks/useGameMethod';
+import { getUserLocation } from '../../../../utils/geolocation';
 
 export interface Location {
   id: string;
@@ -31,6 +32,7 @@ const LOCATIONS: Location[] = [
 export function LocationSelector() {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [isLocating, setIsLocating] = useState(false);
   const { teleportTo } = useGameMethod();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -44,6 +46,18 @@ export function LocationSelector() {
     teleportTo(location.longitude, location.latitude, location.altitude, location.heading);
     setIsOpen(false);
     setSearch('');
+  };
+
+  const handleTeleportCurrentLocation = async () => {
+    setIsLocating(true);
+    try {
+      const loc = await getUserLocation(5000);
+      teleportTo(loc.lng, loc.lat, 200, 0);
+      setIsOpen(false);
+      setSearch('');
+    } finally {
+      setIsLocating(false);
+    }
   };
 
   useEffect(() => {
@@ -77,7 +91,25 @@ export function LocationSelector() {
 
       {isOpen && (
         <div className="absolute top-14 right-0 w-80 glass-panel animate-fade-in z-[60]">
-          <div className="p-3 border-b border-white/5">
+          <div className="p-3 border-b border-white/5 space-y-2">
+            <button
+              onClick={handleTeleportCurrentLocation}
+              disabled={isLocating}
+              className="w-full px-3 py-2 bg-future-primary/10 hover:bg-future-primary/20 border border-future-primary/30 rounded-lg text-left transition-colors flex items-center gap-2.5 group cursor-pointer"
+            >
+              <span className={`text-base ${isLocating ? 'animate-spin' : 'animate-pulse'}`}>
+                {isLocating ? '⏳' : '📍'}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-future-primary group-hover:text-white transition-colors">
+                  {isLocating ? 'Acquiring GPS Location...' : 'My Current Location'}
+                </div>
+                <div className="text-[10px] text-white/50">
+                  Teleport to your real-world coordinates
+                </div>
+              </div>
+            </button>
+
             <input
               type="text"
               value={search}

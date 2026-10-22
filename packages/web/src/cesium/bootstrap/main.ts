@@ -13,6 +13,7 @@ import { PlacementController } from '../builder/PlacementController';
 import { TouchInputManager } from '../input/TouchInputManager';
 import { AutopilotManager } from '../managers/AutopilotManager';
 import { RecordingManager } from '../managers/RecordingManager';
+import { getUserLocation } from '../../utils/geolocation';
 
 export class CesiumVehicleGame {
   private scene: Scene;
@@ -116,21 +117,52 @@ export class CesiumVehicleGame {
   }
 
   public async startCinematicSequence(): Promise<void> {
-    const spawnPosition = Cesium.Cartesian3.fromDegrees(11.9746, 57.7089, 200);
-    
-    console.log('🎬 Starting cinematic sequence...');
-    
+    console.log('🎬 Starting cinematic sequence and locating starting point...');
+
+    // Concurrently start Earth spin presentation and acquire user location
+    const locationPromise = getUserLocation(4000);
     this.scene.startEarthSpin();
-    await this.delay(3000);
-    
+
+    // Await both the minimum 3s cinematic spin and location resolution
+    const [userLocation] = await Promise.all([
+      locationPromise,
+      this.delay(3000),
+    ]);
+
     this.scene.stopEarthSpin();
+
+    // Pre-sample terrain height so aircraft spawns at safe AGL (Above Ground Level)
+    await this.terrainHeights.prefetch([{ lng: userLocation.lng, lat: userLocation.lat }]);
+    const groundElevation = this.terrainHeights.get(userLocation.lng, userLocation.lat) ?? 0;
+    const aircraftAltitude = Math.max(groundElevation + 200, 200);
+    const carAltitude = Math.max(groundElevation + 10, 10);
+
+    // Update vehicle manager's default spawn location
+    this.vehicleManager.setDefaultSpawnLocation(
+      userLocation.lng,
+      userLocation.lat,
+      aircraftAltitude,
+      carAltitude
+    );
+
+    const spawnPosition = Cesium.Cartesian3.fromDegrees(
+      userLocation.lng,
+      userLocation.lat,
+      aircraftAltitude
+    );
+
+    console.log(
+      `📍 Zooming to starting location (${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(
+        4
+      )}, alt: ${Math.round(aircraftAltitude)}m)...`
+    );
     await this.scene.zoomToLocation(spawnPosition, 4500);
-    
-    console.log('✈️ Spawning aircraft...');
-    const aircraft = await this.vehicleManager.spawnAircraft();
+
+    console.log('✈️ Spawning aircraft at starting location...');
+    const aircraft = await this.vehicleManager.spawnAircraft('aircraft', spawnPosition);
     this.cameraManager.setTarget(aircraft);
     this.start();
-    
+
     console.log('🎮 Ready to fly!');
   }
 

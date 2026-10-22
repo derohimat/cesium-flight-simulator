@@ -337,14 +337,16 @@ export class Scene {
     const phase2Duration = 1000; // Last 1 second for final positioning
 
     console.log('📍 Zooming to spawn location...');
+    const carto = Cesium.Cartographic.fromCartesian(position);
+    const approachHeight = Math.max(carto.height + 250, 400);
 
     // Phase 1: Approach the location without specific orientation
     await new Promise<void>((resolve) => {
       this.camera.flyTo({
         destination: Cesium.Cartesian3.fromRadians(
-          Cesium.Cartographic.fromCartesian(position).longitude,
-          Cesium.Cartographic.fromCartesian(position).latitude,
-          400
+          carto.longitude,
+          carto.latitude,
+          approachHeight
         ),
         duration: phase1Duration / 1000, // Convert to seconds
         complete: () => {

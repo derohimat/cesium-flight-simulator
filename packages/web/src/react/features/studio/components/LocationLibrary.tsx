@@ -6,6 +6,7 @@ import { useOptionalGameBridge } from '../../../hooks/useGameBridge';
 import type { ICustomSceneryManager } from '../../../../cesium/managers/CustomSceneryManager';
 import { cinematographyPresets, type PresetOptions } from '../../../../services/cinematography';
 import type { Keyframe } from './FlightTimeline';
+import { getUserLocation } from '../../../../utils/geolocation';
 
 export interface Location extends Place {
   customCapture?: AlephCaptureMetadata;
@@ -72,10 +73,37 @@ export function LocationLibrary({
   const [scale, setScale] = useState<number>(1.0);
   const [isolationEnabled, setIsolationEnabled] = useState<boolean>(true);
   const [isInspectorExpanded, setIsInspectorExpanded] = useState<boolean>(true);
+  const [isLocating, setIsLocating] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const categories = ['all', 'landmark', 'city', 'nature', 'custom'] as const;
+
+  const handleTeleportToUserLocation = async () => {
+    setIsLocating(true);
+    try {
+      const loc = await getUserLocation(5000);
+      const userLocItem: Location = {
+        id: 'user-current-location',
+        name: 'My Current Location',
+        category: 'custom',
+        lat: loc.lat,
+        lon: loc.lng,
+        altitude: 200,
+        description: 'Real-world GPS position',
+      };
+      if (sceneryManager) {
+        sceneryManager.unloadScenery();
+      }
+      setSelectedCustomId(null);
+      setSelectedCapture(null);
+      onSelectLocation(userLocItem);
+    } catch (err) {
+      console.warn('Failed to teleport to current location:', err);
+    } finally {
+      setIsLocating(false);
+    }
+  };
 
   const loadCaptures = useCallback(async () => {
     try {
@@ -436,6 +464,18 @@ export function LocationLibrary({
           />
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40">🔍</span>
         </div>
+
+        {/* Quick Current Location Action */}
+        <button
+          onClick={handleTeleportToUserLocation}
+          disabled={isLocating}
+          className="w-full px-3 py-1.5 bg-future-primary/10 hover:bg-future-primary/20 border border-future-primary/30 rounded-lg text-xs font-medium text-future-primary hover:text-white transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+        >
+          <span className={isLocating ? 'animate-spin' : 'animate-pulse'}>
+            {isLocating ? '⏳' : '📍'}
+          </span>
+          <span>{isLocating ? 'Acquiring GPS...' : 'Fly to My Current Location'}</span>
+        </button>
 
         {/* Category Tabs */}
         <div className="flex gap-1 overflow-x-auto pb-1">
