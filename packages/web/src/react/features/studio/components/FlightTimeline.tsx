@@ -68,14 +68,6 @@ export function FlightTimeline({
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     };
 
-    // Handle keyframe drag (for future use with drag-and-drop)
-    const _handleKeyframeDrag = (id: string, newTime: number) => {
-        const updated = keyframes.map(kf =>
-            kf.id === id ? { ...kf, time: Math.max(0, Math.min(totalDuration, newTime)) } : kf
-        );
-        onKeyframesChange(updated.sort((a, b) => a.time - b.time));
-    };
-
     if (isCollapsed) {
         return (
             <div className="glass-panel px-4 py-2.5 flex items-center justify-between text-xs text-white/80 shadow-2xl border border-white/10 backdrop-blur-md">

@@ -1,15 +1,27 @@
 {
-  "version": 2,
-  "builds": [
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm --prefix packages/web run build",
+  "outputDirectory": "packages/web/dist",
+  "installCommand": "npm --prefix packages/web install",
+  "headers": [
     {
-      "src": "packages/web/package.json",
-      "use": "@vercel/vite"
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cross-Origin-Embedder-Policy",
+          "value": "require-corp"
+        },
+        {
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin"
+        }
+      ]
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "/packages/web/$1"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }

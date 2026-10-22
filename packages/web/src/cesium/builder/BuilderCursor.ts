@@ -51,13 +51,6 @@ export class BuilderCursor {
   }
 
   private createGhostPreview(): void {
-    const cartographic = Cesium.Cartographic.fromCartesian(this.position);
-    const previewPosition = Cesium.Cartesian3.fromRadians(
-      cartographic.longitude,
-      cartographic.latitude,
-      cartographic.height + 5
-    );
-
     this.ghostEntity = this.viewer.entities.add({
       position: new Cesium.CallbackPositionProperty(() => {
         const cart = Cesium.Cartographic.fromCartesian(this.position);

@@ -3,7 +3,12 @@
   "version": "1.0.0",
   "description": "A 3D flight simulator built with Cesium, React, and TypeScript. Fly aircraft or drive a car across real-world terrain with multiple camera modes and a mini-map.",
   "main": "index.js",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
+    "build": "npm --prefix packages/web run build",
+    "dev": "npm --prefix packages/web run dev",
     "deploy:web": "dotenv -e .env -- ./scripts/deploy-web.sh"
   },
   "author": "",
