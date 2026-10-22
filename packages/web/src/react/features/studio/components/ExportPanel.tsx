@@ -33,6 +33,7 @@ interface ExportPanelProps {
   isRecording: boolean;
   onStartRecording: () => void;
   onStopRecording: () => void;
+  onClose?: () => void;
 }
 
 export function ExportPanel({
@@ -41,6 +42,7 @@ export function ExportPanel({
   isRecording,
   onStartRecording,
   onStopRecording,
+  onClose,
 }: ExportPanelProps) {
   const [settings, setSettings] = useState<ExportSettings>({
     resolution: '1080p',
@@ -60,7 +62,7 @@ export function ExportPanel({
   const currentSize = RESOLUTION_SIZES[settings.resolution][settings.aspectRatio];
 
   return (
-    <Panel title="📤 Export Settings" className="w-80">
+    <Panel title="📤 Export Settings" onClose={onClose} className="w-80">
       <div className="space-y-4">
         {/* Quick Record Controls */}
         <div className="grid grid-cols-2 gap-2">

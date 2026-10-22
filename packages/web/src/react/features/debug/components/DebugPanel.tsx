@@ -7,7 +7,11 @@ import { useQualitySettings } from '../hooks/useQualitySettings';
 import { QualityPresets } from './QualityPresets';
 import { QualityControls } from './QualityControls';
 
-export function DebugPanel() {
+interface DebugPanelProps {
+  triggerClassName?: string;
+}
+
+export function DebugPanel({ triggerClassName }: DebugPanelProps = {}) {
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
@@ -21,40 +25,48 @@ export function DebugPanel() {
       if (e.key === '`' || e.key === '~') {
         e.preventDefault();
         setIsOpen(prev => !prev);
+      } else if (e.key === 'Escape' && isOpen) {
+        setIsOpen(false);
       }
     };
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, []);
+  }, [isOpen]);
 
   return (
     <>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-8 left-8 z-50 w-10 h-10 flex items-center justify-center
-                   glass-panel hover:bg-white/10 transition-all duration-300
-                   text-white/60 hover:text-white text-sm font-mono group"
-        title="Toggle Debug Panel (`)"
+        className={triggerClassName || "glass-panel px-3 py-2 hover:bg-white/10 transition-all duration-300 text-white/70 hover:text-white text-xs font-medium flex items-center gap-1.5 group"}
+        title="Settings & Debug (`)"
       >
-        <span className="group-hover:scale-110 transition-transform">~</span>
+        <span className="text-base group-hover:scale-110 transition-transform">⚙️</span>
+        <span className="hidden sm:inline">Settings</span>
       </button>
 
-      {isOpen && <DebugPanelContent />}
+      {isOpen && <DebugPanelContent onClose={() => setIsOpen(false)} />}
     </>
   );
 }
 
 /** Mounted only while open, so its subscriptions and polling cost nothing when closed. */
-function DebugPanelContent() {
+function DebugPanelContent({ onClose }: { onClose: () => void }) {
   const { toggleCollisionDetection, toggleRoverMode, toggleVehicleType, switchCamera, getCollisionAssist, setCollisionAssist } = useGameMethod();
   const { collisionEnabled, heightLockEnabled, fps } = useDebugInfo();
   const [collisionAssist, setCollisionAssistState] = useState(getCollisionAssist);
   const { config, adaptive, setAdaptive, updateSetting, applyPreset } = useQualitySettings();
 
   return (
-    <div className="fixed top-20 left-8 z-50 animate-slide-in max-h-[calc(100vh-120px)] overflow-y-auto">
-      <Panel title="Debug & Quality Settings" className="min-w-[280px] max-w-[320px]">
+    <div 
+      className="fixed inset-0 z-[70] flex items-start justify-start p-4 pt-16 bg-black/40 backdrop-blur-xs animate-fade-in pointer-events-auto"
+      onClick={onClose}
+    >
+      <div 
+        className="w-80 max-h-[calc(100vh-100px)] overflow-y-auto animate-slide-in shadow-2xl" 
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Panel title="Settings & Quality" onClose={onClose} className="min-w-[280px]">
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs text-white/80 font-medium">FPS</span>
@@ -137,6 +149,7 @@ function DebugPanelContent() {
           </div>
         </div>
       </Panel>
+      </div>
     </div>
   );
 }

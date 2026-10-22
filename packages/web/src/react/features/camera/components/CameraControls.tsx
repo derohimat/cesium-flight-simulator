@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useGameMethod } from '../../../hooks/useGameMethod';
 import { useCameraState } from '../hooks/useCameraState';
 
@@ -14,18 +14,27 @@ export function CameraControls() {
   const { cameraType } = useCameraState();
   const [isOpen, setIsOpen] = useState(false);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
   const currentCamera = CAMERA_MODES.find(c => c.id === cameraType) || CAMERA_MODES[0];
 
   return (
     <div className="relative">
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="glass-panel px-4 py-2.5 hover:bg-white/10 transition-all duration-300 group"
+        className="glass-panel px-3 sm:px-4 py-2 sm:py-2.5 hover:bg-white/10 transition-all duration-300 group"
         title="Switch Camera (C)"
       >
         <div className="flex items-center gap-2">
           <span className="text-lg">{currentCamera.icon}</span>
-          <span className="text-xs font-medium text-white/80 group-hover:text-white transition-colors">
+          <span className="hidden sm:inline text-xs font-medium text-white/80 group-hover:text-white transition-colors">
             {currentCamera.name}
           </span>
           <span className={`text-xs text-white/40 transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>

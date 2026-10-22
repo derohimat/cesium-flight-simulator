@@ -67,30 +67,40 @@ export function LocationSelector() {
       }
     };
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
+      window.addEventListener('keydown', handleKeyDown);
     }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isOpen]);
 
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="glass-panel px-4 py-2.5 hover:bg-white/10 transition-all duration-300 group flex items-center gap-2"
+        className="glass-panel px-3 sm:px-4 py-2 sm:py-2.5 hover:bg-white/10 transition-all duration-300 group flex items-center gap-2"
         title="Teleport to Location"
       >
         <svg className="w-4 h-4 text-white/60 group-hover:text-white/90 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
-        <span className="text-xs font-medium text-white/80 group-hover:text-white transition-colors">
+        <span className="hidden sm:inline text-xs font-medium text-white/80 group-hover:text-white transition-colors">
           Teleport
         </span>
       </button>
 
       {isOpen && (
-        <div className="absolute top-14 right-0 w-80 glass-panel animate-fade-in z-[60]">
+        <div className="absolute top-full mt-2 right-0 w-80 glass-panel animate-fade-in z-[60]">
           <div className="p-3 border-b border-white/5 space-y-2">
             <button
               onClick={handleTeleportCurrentLocation}

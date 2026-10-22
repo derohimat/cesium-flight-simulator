@@ -21,7 +21,7 @@ export function Stars({ count, size = 'text-sm' }: { count: number; size?: strin
   );
 }
 
-export function MissionsPanel() {
+export function MissionsPanel({ onClose }: { onClose?: () => void } = {}) {
   const { getMissions, startMission } = useGameMethod();
   const mission = useMission();
   const missions = useMemo(() => getMissions(), [getMissions]);
@@ -39,6 +39,7 @@ export function MissionsPanel() {
         busy={busy}
         bestTime={records[selected.id]?.bestTime}
         onBack={() => setSelectedId(null)}
+        onClose={onClose}
         onStart={() => {
           startMission(selected.id).catch((error) => console.error('Mission failed to start:', error));
         }}
@@ -47,7 +48,7 @@ export function MissionsPanel() {
   }
 
   return (
-    <Panel title="Missions" className="w-[320px]">
+    <Panel title="Missions" onClose={onClose} className="w-[320px]">
       <div className="space-y-4">
         {(['sightseeing', 'timeTrial', 'landing'] as MissionKind[]).map((kind) => (
           <div key={kind} className="space-y-2">
@@ -93,12 +94,13 @@ interface BriefingProps {
   busy: boolean;
   bestTime?: number;
   onBack: () => void;
+  onClose?: () => void;
   onStart: () => void;
 }
 
-function MissionBriefing({ mission, busy, bestTime, onBack, onStart }: BriefingProps) {
+function MissionBriefing({ mission, busy, bestTime, onBack, onClose, onStart }: BriefingProps) {
   return (
-    <Panel title={mission.title} className="w-[320px]">
+    <Panel title={mission.title} onClose={onClose} className="w-[320px]">
       <div className="space-y-4">
         <div className="text-[11px] text-white/50">
           {KIND_LABEL[mission.kind].icon} {KIND_LABEL[mission.kind].label} · {mission.region}

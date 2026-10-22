@@ -24,7 +24,11 @@ function fpsColorClass(fps: number, targetHz: number): string {
  * reads the governor's ring buffers straight from the engine each animation frame and draws
  * imperatively, so it adds no React work per frame.
  */
-export function PerfOverlay() {
+interface PerfOverlayProps {
+  className?: string;
+}
+
+export function PerfOverlay({ className }: PerfOverlayProps = {}) {
   const stats = useGameEvent('performanceStats');
   const { getFrameHistory } = useGameMethod();
   const [expanded, setExpanded] = useState(false);
@@ -85,61 +89,73 @@ export function PerfOverlay() {
   const fps = stats ? Math.round(stats.fps) : 0;
   const targetHz = stats?.targetHz ?? 60;
 
+  useEffect(() => {
+    if (!expanded) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setExpanded(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [expanded]);
+
   return (
-    <button
-      type="button"
-      onClick={() => setExpanded(e => !e)}
-      className="fixed top-8 left-20 z-50 glass-panel px-3 py-2 text-left font-mono
-                 hover:bg-white/10 transition-colors duration-200
-                 focus:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
-      title="Performance (click to expand)"
-    >
-      <div className="flex items-baseline gap-2">
-        <span className={`text-lg font-semibold tabular-nums ${fpsColorClass(fps, targetHz)}`}>{fps}</span>
-        <span className="text-[10px] text-white/50 uppercase tracking-wider">fps</span>
-        {stats && (
-          <span className="text-[10px] text-white/50 tabular-nums">
-            {stats.frameMs.toFixed(1)}ms · 1% {Math.round(stats.onePercentLowFps)}
-          </span>
-        )}
-      </div>
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setExpanded(e => !e)}
+        className={className || "glass-panel px-2.5 sm:px-3 py-2 text-left font-mono hover:bg-white/10 transition-colors duration-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-white/40"}
+        title="Performance (click to expand)"
+      >
+        <div className="flex items-baseline gap-1.5 sm:gap-2">
+          <span className={`text-base sm:text-lg font-semibold tabular-nums ${fpsColorClass(fps, targetHz)}`}>{fps}</span>
+          <span className="text-[10px] text-white/50 uppercase tracking-wider">fps</span>
+          {stats && (
+            <span className="hidden md:inline text-[10px] text-white/50 tabular-nums">
+              {stats.frameMs.toFixed(1)}ms · 1% {Math.round(stats.onePercentLowFps)}
+            </span>
+          )}
+        </div>
+      </button>
 
       {expanded && stats && (
-        <div className="mt-2 space-y-1.5">
-          <canvas
-            ref={canvasRef}
-            style={{ width: GRAPH_WIDTH, height: GRAPH_HEIGHT }}
-            className="block rounded bg-black/30"
-          />
-          <div className="flex gap-3 text-[9px] text-white/40">
-            <span><span style={{ color: COLOR_OK }}>■</span> frame</span>
-            <span><span style={{ color: COLOR_CPU }}>■</span> cpu</span>
-            <span>┄ budget</span>
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setExpanded(false)} />
+          <div className="absolute top-full mt-2 left-0 z-50 glass-panel p-3 space-y-1.5 animate-fade-in shadow-2xl min-w-[240px]">
+            <canvas
+              ref={canvasRef}
+              style={{ width: GRAPH_WIDTH, height: GRAPH_HEIGHT }}
+              className="block rounded bg-black/30"
+            />
+            <div className="flex gap-3 text-[9px] text-white/40">
+              <span><span style={{ color: COLOR_OK }}>■</span> frame</span>
+              <span><span style={{ color: COLOR_CPU }}>■</span> cpu</span>
+              <span>┄ budget</span>
+            </div>
+            <StatRow
+              label="Display"
+              value={`${stats.refreshHz} Hz${stats.paced ? ` → locked ${Math.round(stats.targetHz)}` : ''}`}
+            />
+            <StatRow
+              label="Quality"
+              value={
+                stats.adaptive
+                  ? `auto · level ${stats.tierCount - stats.tier}/${stats.tierCount}`
+                  : 'manual'
+              }
+            />
+            <StatRow
+              label="Render"
+              value={`MSAA ${stats.msaaSamples}× · ${Math.round(stats.resolutionScale * 100)}% · SSE ×${stats.sseMultiplier}`}
+            />
+            <StatRow label="CPU" value={`${stats.cpuMs.toFixed(1)} ms/frame`} />
+            <StatRow
+              label="Physics"
+              value={`${stats.physicsStepsLastFrame} step · ${stats.groundQueriesPerSecond} ray/s`}
+            />
           </div>
-          <StatRow
-            label="Display"
-            value={`${stats.refreshHz} Hz${stats.paced ? ` → locked ${Math.round(stats.targetHz)}` : ''}`}
-          />
-          <StatRow
-            label="Quality"
-            value={
-              stats.adaptive
-                ? `auto · level ${stats.tierCount - stats.tier}/${stats.tierCount}`
-                : 'manual'
-            }
-          />
-          <StatRow
-            label="Render"
-            value={`MSAA ${stats.msaaSamples}× · ${Math.round(stats.resolutionScale * 100)}% · SSE ×${stats.sseMultiplier}`}
-          />
-          <StatRow label="CPU" value={`${stats.cpuMs.toFixed(1)} ms/frame`} />
-          <StatRow
-            label="Physics"
-            value={`${stats.physicsStepsLastFrame} step · ${stats.groundQueriesPerSecond} ray/s`}
-          />
-        </div>
+        </>
       )}
-    </button>
+    </div>
   );
 }
 

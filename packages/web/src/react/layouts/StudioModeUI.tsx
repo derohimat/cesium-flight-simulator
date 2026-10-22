@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import * as Cesium from 'cesium';
 import { DirectorPanel } from '../features/director/components/DirectorPanel';
-import { CameraControls } from '../features/camera/components/CameraControls';
 import { LocationLibrary } from '../features/studio/components/LocationLibrary';
 import { ExportPanel } from '../features/studio/components/ExportPanel';
 import { MissionsPanel } from '../features/missions/components/MissionsPanel';
@@ -86,8 +85,16 @@ function interpolatePose(
   return kfs[0];
 }
 
-export function StudioModeUI() {
-  const [activePanel, setActivePanel] = useState<'director' | 'missions' | 'locations' | 'export'>('director');
+export interface StudioModeUIProps {
+  isTimelineCollapsed?: boolean;
+  onTimelineCollapseChange?: (collapsed: boolean) => void;
+}
+
+export function StudioModeUI({
+  isTimelineCollapsed: controlledCollapsed,
+  onTimelineCollapseChange,
+}: StudioModeUIProps = {}) {
+  const [activePanel, setActivePanel] = useState<'director' | 'missions' | 'locations' | 'export' | null>(null);
   const [isRecording, setIsRecording] = useState(false);
 
   // Timeline State
@@ -95,7 +102,18 @@ export function StudioModeUI() {
   const [currentTime, setCurrentTime] = useState(0);
   const [totalDuration, setTotalDuration] = useState(20);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isTimelineCollapsed, setIsTimelineCollapsed] = useState(false);
+  const [internalCollapsed, setInternalCollapsed] = useState(true);
+
+  const isTimelineCollapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
+
+  const setTimelineCollapsed = useCallback((val: boolean) => {
+    setInternalCollapsed(val);
+    onTimelineCollapseChange?.(val);
+  }, [onTimelineCollapseChange]);
+
+  const togglePanel = (panel: 'director' | 'missions' | 'locations' | 'export') => {
+    setActivePanel((prev) => (prev === panel ? null : panel));
+  };
 
   const optionalBridge = useOptionalGameBridge();
   const { 
@@ -287,7 +305,7 @@ export function StudioModeUI() {
     const duration = generatedKeyframes.length > 0 ? generatedKeyframes[generatedKeyframes.length - 1].time : 20;
     setTotalDuration(duration);
     setCurrentTime(0);
-    setIsTimelineCollapsed(false);
+    setTimelineCollapsed(false);
     if (generatedKeyframes.length > 0) {
       applyPoseToCamera(generatedKeyframes[0]);
     }
@@ -295,67 +313,66 @@ export function StudioModeUI() {
 
   return (
     <>
-      {/* Top Bar */}
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-auto">
-        <div className="glass-panel px-2 py-1 flex items-center gap-1">
+      {/* Top Bar - Studio Workflow Tabs */}
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-40 pointer-events-auto max-w-[calc(100vw-360px)]">
+        <div className="glass-panel px-1.5 py-1 flex items-center gap-1 shadow-xl">
           <PanelTab 
             icon="🎬" 
             label="Director" 
             isActive={activePanel === 'director'} 
-            onClick={() => setActivePanel('director')} 
+            onClick={() => togglePanel('director')} 
           />
           <PanelTab
             icon="🏁"
             label="Missions"
             isActive={activePanel === 'missions'}
-            onClick={() => setActivePanel('missions')}
+            onClick={() => togglePanel('missions')}
           />
           <PanelTab 
             icon="📍" 
             label="Locations" 
             isActive={activePanel === 'locations'} 
-            onClick={() => setActivePanel('locations')} 
+            onClick={() => togglePanel('locations')} 
           />
           <PanelTab 
             icon="📤" 
             label="Export" 
             isActive={activePanel === 'export'} 
-            onClick={() => setActivePanel('export')} 
+            onClick={() => togglePanel('export')} 
           />
         </div>
       </div>
 
-      {/* Camera Controls - Top Right */}
-      <div className="fixed top-4 right-4 z-50 pointer-events-auto">
-        <CameraControls />
-      </div>
-
-      {/* Active Panel - Left Side */}
-      <div className="fixed top-20 left-4 z-50 pointer-events-auto max-h-[calc(100vh-140px)] overflow-y-auto">
-        {activePanel === 'director' && <DirectorPanel />}
-        {activePanel === 'missions' && <MissionsPanel />}
-        {activePanel === 'locations' && (
-          <LocationLibrary 
-            onSelectLocation={handleSelectLocation}
-            onAddWaypoint={handleAddWaypoint}
-            onApplyCinematographyPreset={handleApplyCinematographyPreset}
-          />
-        )}
-        {activePanel === 'export' && (
-          <ExportPanel 
-            onExport={handleExport}
-            onTakeScreenshot={handleTakeScreenshot}
-            isRecording={isRecording}
-            onStartRecording={handleStartRecording}
-            onStopRecording={handleStopRecording}
-          />
-        )}
-      </div>
+      {/* Active Studio Panel - Left Side Drawer */}
+      {activePanel && (
+        <div className="fixed top-16 left-4 z-40 pointer-events-auto max-h-[calc(100vh-120px)] w-80 sm:w-88 max-w-[calc(100vw-2rem)] overflow-y-auto animate-fade-in shadow-2xl">
+          {activePanel === 'director' && <DirectorPanel onClose={() => setActivePanel(null)} />}
+          {activePanel === 'missions' && <MissionsPanel onClose={() => setActivePanel(null)} />}
+          {activePanel === 'locations' && (
+            <LocationLibrary 
+              onClose={() => setActivePanel(null)}
+              onSelectLocation={handleSelectLocation}
+              onAddWaypoint={handleAddWaypoint}
+              onApplyCinematographyPreset={handleApplyCinematographyPreset}
+            />
+          )}
+          {activePanel === 'export' && (
+            <ExportPanel 
+              onClose={() => setActivePanel(null)}
+              onExport={handleExport}
+              onTakeScreenshot={handleTakeScreenshot}
+              isRecording={isRecording}
+              onStartRecording={handleStartRecording}
+              onStopRecording={handleStopRecording}
+            />
+          )}
+        </div>
+      )}
 
       {/* Recording Indicator */}
       {isRecording && (
-        <div className="fixed top-4 left-4 z-[60] pointer-events-none">
-          <div className="flex items-center gap-2 bg-red-600/90 px-4 py-2 rounded-full animate-pulse">
+        <div className="fixed top-16 right-4 z-[60] pointer-events-none">
+          <div className="flex items-center gap-2 bg-red-600/90 px-4 py-2 rounded-full animate-pulse shadow-lg shadow-red-900/40">
             <span className="w-3 h-3 bg-white rounded-full" />
             <span className="text-sm font-medium text-white">Recording</span>
           </div>
@@ -363,7 +380,7 @@ export function StudioModeUI() {
       )}
 
       {/* Bottom Dock - Flight Timeline */}
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[95%] max-w-4xl pointer-events-auto transition-all duration-300">
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 w-[90%] max-w-3xl pointer-events-auto transition-all duration-300">
         <FlightTimeline
           keyframes={keyframes}
           onKeyframesChange={handleKeyframesChange}
@@ -377,12 +394,12 @@ export function StudioModeUI() {
           totalDuration={totalDuration}
           onSeek={handleSeek}
           isCollapsed={isTimelineCollapsed}
-          onToggleCollapse={() => setIsTimelineCollapsed(!isTimelineCollapsed)}
+          onToggleCollapse={() => setTimelineCollapsed(!isTimelineCollapsed)}
         />
       </div>
 
       {/* Keyboard Shortcuts Hint - Bottom Left */}
-      <div className="fixed bottom-4 left-4 z-30 pointer-events-none hidden md:block">
+      <div className="fixed bottom-4 left-4 z-20 pointer-events-none hidden xl:block">
         <div className="glass-panel px-4 py-2 text-xs text-white/50 space-y-1">
           <div className="flex items-center gap-3">
             <span><kbd className="px-1 bg-white/10 rounded">C</kbd> Camera</span>
@@ -407,14 +424,14 @@ function PanelTab({ icon, label, isActive, onClick }: PanelTabProps) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+      className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg transition-all ${
         isActive 
-          ? 'bg-future-primary text-white' 
+          ? 'bg-future-primary text-white shadow-md shadow-future-primary/30 font-medium' 
           : 'text-white/60 hover:bg-white/10 hover:text-white'
       }`}
     >
-      <span className="text-lg">{icon}</span>
-      <span className="text-sm font-medium">{label}</span>
+      <span className="text-base sm:text-lg">{icon}</span>
+      <span className="hidden sm:inline text-xs sm:text-sm font-medium">{label}</span>
     </button>
   );
 }

@@ -275,11 +275,11 @@ export class VehicleManager implements FixedUpdatable {
     );
     
     const car = new Car(id, {
-      modelUrl: './walter.glb',
-      scale: 10,
+      modelUrl: './car.glb',
+      scale: 1.5,
       position: spawnPosition,
       heading,
-      modelHeadingOffset: Cesium.Math.toRadians(90)
+      modelHeadingOffset: Cesium.Math.toRadians(0)
     });
 
     await this.addVehicle(car);

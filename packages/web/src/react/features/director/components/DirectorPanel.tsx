@@ -18,7 +18,7 @@ export interface Waypoint {
 
 export type FlightMode = 'linear' | 'orbit' | 'lock';
 
-export function DirectorPanel() {
+export function DirectorPanel({ onClose }: { onClose?: () => void } = {}) {
   const [isPortrait, setIsPortrait] = useState(false);
   const [autoRecord, setAutoRecord] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
@@ -261,9 +261,8 @@ export function DirectorPanel() {
   }, [flightMode, waypoints]);
 
   return (
-    <div className="fixed top-8 left-8 z-50 w-80 pointer-events-auto flex flex-col gap-2 max-h-[85vh]">
-      <Panel title="🎬 Director Mode" className="p-0 overflow-hidden flex flex-col">
-        {/* Sticky Header with Telemetry */}
+    <Panel title="🎬 Director Mode" onClose={onClose} className="w-80 p-0 overflow-hidden flex flex-col pointer-events-auto">
+      {/* Sticky Header with Telemetry */}
         <div className="p-3 bg-black/40 border-b border-white/10 backdrop-blur-xl">
           <TelemetryHUD />
 
@@ -349,6 +348,5 @@ export function DirectorPanel() {
           )}
         </div>
       </Panel>
-    </div>
   );
 }

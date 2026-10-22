@@ -25,6 +25,7 @@ interface LocationLibraryProps {
   onCustomLocationDetail?: (capture: AlephCaptureMetadata) => void;
   customSceneryManager?: ICustomSceneryManager;
   onApplyCinematographyPreset?: (presetName: 'orbit' | 'flyby' | 'spiral', keyframes: Keyframe[]) => void;
+  onClose?: () => void;
 }
 
 const CATEGORY_ICONS = {
@@ -48,7 +49,8 @@ export function LocationLibrary({
   onToggleCollapse,
   onCustomLocationDetail,
   customSceneryManager,
-  onApplyCinematographyPreset
+  onApplyCinematographyPreset,
+  onClose,
 }: LocationLibraryProps) {
   const optionalBridge = useOptionalGameBridge();
   const sceneryManager = customSceneryManager || (optionalBridge ? optionalBridge.getCustomSceneryManager() : undefined);
@@ -446,7 +448,7 @@ export function LocationLibrary({
   }
 
   return (
-    <Panel title="📍 Location Library" className="w-80">
+    <Panel title="📍 Location Library" onClose={onClose} className="w-80">
       <div 
         className="space-y-3"
         onDragOver={handleDragOver}
