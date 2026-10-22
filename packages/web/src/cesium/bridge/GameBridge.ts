@@ -12,6 +12,7 @@ import type { FrameHook } from '../core/GameLoop';
 import { LandmarkWatcher } from '../missions/LandmarkWatcher';
 import { MISSIONS } from '../missions/missions';
 import type { MissionDefinition, MissionSnapshot } from '../missions/types';
+import type { CustomSceneryManager } from '../managers/CustomSceneryManager';
 
 /** UI refresh rates. Faster only burns main-thread time the renderer needs. */
 const VEHICLE_STATE_INTERVAL_MS = 1000 / 30;
@@ -507,6 +508,10 @@ export class GameBridge extends TypedEventEmitter<GameEvents> {
     if (!terrainAvoidance) return null;
 
     return terrainAvoidance.withHeights(() => terrainAvoidance.getAltitudePresets(lng, lat));
+  }
+
+  public getCustomSceneryManager(): CustomSceneryManager {
+    return this.game.getScene().getCustomSceneryManager();
   }
 }
 

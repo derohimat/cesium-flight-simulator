@@ -2,6 +2,7 @@ import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { getTokens } from '../../utils/tokenValidator';
 import { RenderLoop } from './RenderLoop';
+import { CustomSceneryManager } from '../managers/CustomSceneryManager';
 
 export interface QualityConfig {
   fxaaEnabled: boolean;
@@ -31,6 +32,7 @@ export class Scene {
   /** User/preset-chosen SSE; the performance governor scales it by `sseMultiplier`. */
   private baseMaximumScreenSpaceError = 24;
   private sseMultiplier = 1;
+  private customSceneryManager: CustomSceneryManager;
 
   constructor(containerId: string) {
     Cesium.Ion.defaultAccessToken = getTokens().cesium;
@@ -58,6 +60,7 @@ export class Scene {
     this.camera = this.viewer.camera;
     this.clock = this.viewer.clock;
     this.primitives = this.scene.primitives;
+    this.customSceneryManager = new CustomSceneryManager(this);
 
     if (!import.meta.env.VITE_CESIUM_TOKEN) {
       console.warn('⚠️ VITE_CESIUM_TOKEN is missing! 3D buildings might not load.');
@@ -144,6 +147,7 @@ export class Scene {
       );
       this.primitives.add(this.tileset);
       this.applyScreenSpaceError();
+      this.customSceneryManager.onTilesetLoaded(this.tileset);
 
       this.setVehicleQualityMode('aircraft');
     } catch (error) {
@@ -369,5 +373,18 @@ export class Scene {
         }
       });
     });
+  }
+
+  public getTileset(): Cesium.Cesium3DTileset | null {
+    return this.tileset;
+  }
+
+  public getCustomSceneryManager(): CustomSceneryManager {
+    return this.customSceneryManager;
+  }
+
+  public destroy(): void {
+    this.stopEarthSpin();
+    this.customSceneryManager.unloadScenery();
   }
 }

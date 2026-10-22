@@ -55,6 +55,7 @@ export function useGameMethod() {
     calculateAutoAltitude: (lng: number, lat: number) => bridge.calculateAutoAltitude(lng, lat),
     calculateAutoAltitudeForPath: (waypoints: { lat: number; lon: number }[]) => bridge.calculateAutoAltitudeForPath(waypoints),
     getAltitudePresets: (lng: number, lat: number) => bridge.getAltitudePresets(lng, lat),
+    getCustomSceneryManager: () => bridge.getCustomSceneryManager(),
   }), [bridge]);
 }
 

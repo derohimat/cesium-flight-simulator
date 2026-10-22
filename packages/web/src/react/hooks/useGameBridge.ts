@@ -13,6 +13,10 @@ export function useGameBridge(): GameBridge {
   return bridge;
 }
 
+export function useOptionalGameBridge(): GameBridge | null {
+  return useContext(GameBridgeContext);
+}
+
 
 
 

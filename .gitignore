@@ -32,3 +32,8 @@ pnpm-debug.log*
 # OS files
 Thumbs.db
 
+# Teamwork agent artifacts
+.agents/
+ORIGINAL_REQUEST.md
+TEST_INFRA.md
+TEST_READY.md

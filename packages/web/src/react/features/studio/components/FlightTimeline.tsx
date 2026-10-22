@@ -13,7 +13,7 @@ interface Keyframe {
     label?: string;
 }
 
-interface FlightTimelineProps {
+export interface FlightTimelineProps {
     keyframes: Keyframe[];
     onKeyframesChange: (keyframes: Keyframe[]) => void;
     onAddKeyframe: () => void;
@@ -25,6 +25,8 @@ interface FlightTimelineProps {
     currentTime: number;
     totalDuration: number;
     onSeek: (time: number) => void;
+    isCollapsed?: boolean;
+    onToggleCollapse?: () => void;
 }
 
 export function FlightTimeline({
@@ -39,6 +41,8 @@ export function FlightTimeline({
     currentTime,
     totalDuration,
     onSeek,
+    isCollapsed = false,
+    onToggleCollapse,
 }: FlightTimelineProps) {
     const [selectedKeyframe, setSelectedKeyframe] = useState<string | null>(null);
     const [_isDragging, setIsDragging] = useState(false);
@@ -72,9 +76,67 @@ export function FlightTimeline({
         onKeyframesChange(updated.sort((a, b) => a.time - b.time));
     };
 
+    if (isCollapsed) {
+        return (
+            <div className="glass-panel px-4 py-2.5 flex items-center justify-between text-xs text-white/80 shadow-2xl border border-white/10 backdrop-blur-md">
+                <div className="flex items-center gap-3">
+                    <span className="font-semibold text-white flex items-center gap-1.5">
+                        <span>⏱️</span>
+                        <span>Flight Timeline</span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-future-primary/20 text-future-primary border border-future-primary/30 text-[10px] font-mono">
+                        {keyframes.length} keyframe{keyframes.length !== 1 ? 's' : ''}
+                    </span>
+                    <div className="flex items-center gap-2 font-mono text-white/60">
+                        <span className="text-future-primary">{formatTime(currentTime)}</span>
+                        <span>/</span>
+                        <span>{formatTime(totalDuration)}</span>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={isPlaying ? onStopPreview : onPlayPreview}
+                        className={`px-3 py-1 rounded-lg font-medium transition-all text-xs flex items-center gap-1 ${
+                            isPlaying
+                                ? 'bg-yellow-500 text-black hover:bg-yellow-400'
+                                : 'bg-future-primary text-white hover:bg-future-primary/80'
+                        }`}
+                        title={isPlaying ? 'Pause' : 'Play'}
+                    >
+                        <span>{isPlaying ? '⏸️' : '▶️'}</span>
+                        <span>{isPlaying ? 'Pause' : 'Play'}</span>
+                    </button>
+                    {onToggleCollapse && (
+                        <button
+                            onClick={onToggleCollapse}
+                            className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs transition-colors flex items-center gap-1"
+                            title="Expand Flight Timeline"
+                        >
+                            <span>▲</span>
+                            <span>Expand</span>
+                        </button>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
     return (
         <Panel title="⏱️ Flight Timeline" className="w-full">
             <div className="space-y-4">
+                {onToggleCollapse && (
+                    <div className="flex justify-end -mt-8 mb-2">
+                        <button
+                            onClick={onToggleCollapse}
+                            className="text-xs text-white/50 hover:text-white px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors flex items-center gap-1"
+                            title="Collapse Timeline"
+                        >
+                            <span>▼</span>
+                            <span>Collapse</span>
+                        </button>
+                    </div>
+                )}
                 {/* Transport Controls */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">

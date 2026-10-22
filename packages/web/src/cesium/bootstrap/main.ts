@@ -204,9 +204,13 @@ export class CesiumVehicleGame {
     return this.recordingManager;
   }
 
+  public getCustomSceneryManager() {
+    return this.scene.getCustomSceneryManager();
+  }
+
   public destroy(): void {
     this.stop();
-    this.scene.stopEarthSpin();
+    this.scene.destroy();
     this.vehicleManager.destroy();
     this.cameraManager.destroy();
     this.inputManager.destroy();
